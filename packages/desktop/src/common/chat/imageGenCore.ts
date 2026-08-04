@@ -13,11 +13,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { jsonrepair } from 'jsonrepair';
-import type OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import { ClientFactory, type RotatingClient } from '@/common/api/ClientFactory';
 import type { TProviderWithModel } from '@/common/config/storage';
 import type { UnifiedChatCompletionResponse } from '@/common/api/RotatingApiClient';
 import { IMAGE_EXTENSIONS, MIME_TYPE_MAP, MIME_TO_EXT_MAP, DEFAULT_IMAGE_EXTENSION } from '@/common/config/constants';
+import { getImageGenerationApiMode } from '@/common/utils/imageModelAllowlist';
 
 const API_TIMEOUT_MS = 120000; // 2 minutes for image generation API calls
 
@@ -79,14 +80,14 @@ export function getFileExtensionFromDataUrl(dataUrl: string): string {
   return DEFAULT_IMAGE_EXTENSION;
 }
 
-export async function saveGeneratedImage(base64Data: string, workspaceDir: string): Promise<string> {
+async function saveGeneratedImageBuffer(
+  imageBuffer: Buffer,
+  workspaceDir: string,
+  fileExtension: string
+): Promise<string> {
   const timestamp = Date.now();
-  const fileExtension = getFileExtensionFromDataUrl(base64Data);
   const file_name = `img-${timestamp}${fileExtension}`;
   const file_path = path.join(workspaceDir, file_name);
-
-  const base64WithoutPrefix = base64Data.replace(/^data:image\/[^;]+;base64,/, '');
-  const imageBuffer = Buffer.from(base64WithoutPrefix, 'base64');
 
   try {
     await fs.promises.writeFile(file_path, imageBuffer);
@@ -97,6 +98,48 @@ export async function saveGeneratedImage(base64Data: string, workspaceDir: strin
       cause: error,
     });
   }
+}
+
+export async function saveGeneratedImage(base64Data: string, workspaceDir: string): Promise<string> {
+  const fileExtension = getFileExtensionFromDataUrl(base64Data);
+  const base64WithoutPrefix = base64Data.replace(/^data:image\/[^;]+;base64,/, '');
+  const imageBuffer = Buffer.from(base64WithoutPrefix, 'base64');
+  return saveGeneratedImageBuffer(imageBuffer, workspaceDir, fileExtension);
+}
+
+function getFileExtensionFromRemoteImage(imageUrl: string, contentType: string | null): string {
+  const normalizedContentType = contentType?.split(';')[0].trim().toLowerCase();
+  if (normalizedContentType?.startsWith('image/')) {
+    const subtype = normalizedContentType.slice('image/'.length);
+    const extension = MIME_TO_EXT_MAP[subtype];
+    if (extension) return extension;
+  }
+
+  try {
+    const urlExtension = path.extname(new URL(imageUrl).pathname).toLowerCase();
+    if (IMAGE_EXTENSIONS.includes(urlExtension as ImageExtension)) {
+      return urlExtension;
+    }
+  } catch (_error) {
+    // Fall back to PNG when the URL cannot be parsed.
+  }
+
+  return DEFAULT_IMAGE_EXTENSION;
+}
+
+async function saveGeneratedImageFromUrl(
+  imageUrl: string,
+  workspaceDir: string,
+  signal?: AbortSignal
+): Promise<string> {
+  const response = await fetch(imageUrl, { signal });
+  if (!response.ok) {
+    throw new Error(`Failed to download generated image: HTTP ${response.status} ${response.statusText}`);
+  }
+
+  const imageBuffer = Buffer.from(await response.arrayBuffer());
+  const fileExtension = getFileExtensionFromRemoteImage(imageUrl, response.headers.get('content-type'));
+  return saveGeneratedImageBuffer(imageBuffer, workspaceDir, fileExtension);
 }
 
 // ===== Image Content Processing =====
@@ -155,6 +198,54 @@ export async function processImageUri(imageUri: string, workspaceDir: string): P
   }
 }
 
+
+interface ImageUploadSource {
+  buffer: Buffer;
+  filename: string;
+  mimeType: string;
+}
+
+async function loadImageUploadSource(
+  imageUri: string,
+  workspaceDir: string,
+  signal?: AbortSignal
+): Promise<ImageUploadSource> {
+  if (isHttpUrl(imageUri)) {
+    const response = await fetch(imageUri, { signal });
+    if (!response.ok) {
+      throw new Error(`Failed to download input image: HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+    const mimeType = contentType?.startsWith('image/') ? contentType : 'image/png';
+    let filename = 'input.png';
+    try {
+      filename = path.basename(new URL(imageUri).pathname) || filename;
+    } catch (_error) {
+      // Keep the default filename.
+    }
+
+    return {
+      buffer: Buffer.from(await response.arrayBuffer()),
+      filename,
+      mimeType,
+    };
+  }
+
+  const normalizedUri = imageUri.startsWith('@') ? imageUri.substring(1) : imageUri;
+  const fullPath = path.isAbsolute(normalizedUri) ? normalizedUri : path.join(workspaceDir, normalizedUri);
+  await fs.promises.access(fullPath, fs.constants.F_OK);
+  if (!isImageFile(fullPath)) {
+    throw new Error(`File is not a supported image type: ${fullPath}`);
+  }
+
+  return {
+    buffer: await fs.promises.readFile(fullPath),
+    filename: path.basename(fullPath),
+    mimeType: getImageMimeType(fullPath),
+  };
+}
+
 // ===== Core Execution =====
 
 export interface ImageGenParams {
@@ -168,6 +259,108 @@ export interface ImageGenResult {
   imagePath?: string;
   relativeImagePath?: string;
   error?: string;
+}
+
+async function saveImagesApiResponse(
+  response: OpenAI.Images.ImagesResponse,
+  provider: TProviderWithModel,
+  workspaceDir: string,
+  operation: 'generated' | 'edited',
+  signal?: AbortSignal
+): Promise<ImageGenResult> {
+  const firstImage = response.data?.[0];
+  if (!firstImage) {
+    return {
+      success: false,
+      text: `No image was returned by the Images API (${operation}).`,
+      error: 'No image returned',
+    };
+  }
+
+  let imagePath: string;
+  if (firstImage.b64_json) {
+    const imageData = firstImage.b64_json.startsWith('data:image/')
+      ? firstImage.b64_json
+      : `data:image/png;base64,${firstImage.b64_json}`;
+    imagePath = await saveGeneratedImage(imageData, workspaceDir);
+  } else if (firstImage.url) {
+    if (firstImage.url.startsWith('data:image/')) {
+      imagePath = await saveGeneratedImage(firstImage.url, workspaceDir);
+    } else {
+      const resolvedImageUrl = isHttpUrl(firstImage.url)
+        ? firstImage.url
+        : new URL(firstImage.url, provider.base_url).toString();
+      imagePath = await saveGeneratedImageFromUrl(resolvedImageUrl, workspaceDir, signal);
+    }
+  } else {
+    return {
+      success: false,
+      text: 'Images API response contains neither b64_json nor url.',
+      error: 'Invalid Images API response',
+    };
+  }
+
+  const relativeImagePath = path.relative(workspaceDir, imagePath);
+  const responseText = firstImage.revised_prompt || `Image ${operation} successfully.`;
+  return {
+    success: true,
+    text: `${responseText}\n\n${operation === 'edited' ? 'Edited' : 'Generated'} image saved to: ${imagePath}`,
+    imagePath,
+    relativeImagePath,
+  };
+}
+
+async function executeImagesApiGeneration(
+  params: ImageGenParams,
+  provider: TProviderWithModel,
+  rotatingClient: RotatingClient,
+  workspaceDir: string,
+  signal?: AbortSignal
+): Promise<ImageGenResult> {
+  if (!('createImage' in rotatingClient)) {
+    throw new Error(`Provider ${provider.platform} does not support the OpenAI Images API client.`);
+  }
+
+  const response = await rotatingClient.createImage(
+    {
+      model: provider.use_model,
+      prompt: params.prompt,
+    },
+    { signal, timeout: API_TIMEOUT_MS }
+  );
+
+  return saveImagesApiResponse(response, provider, workspaceDir, 'generated', signal);
+}
+
+async function executeImagesApiEdit(
+  params: ImageGenParams,
+  imageUris: string[],
+  provider: TProviderWithModel,
+  rotatingClient: RotatingClient,
+  workspaceDir: string,
+  signal?: AbortSignal
+): Promise<ImageGenResult> {
+  if (!('createImageEdit' in rotatingClient)) {
+    throw new Error(`Provider ${provider.platform} does not support the OpenAI Images Edit API client.`);
+  }
+
+  const sources = await Promise.all(
+    imageUris.map((imageUri) => loadImageUploadSource(imageUri, workspaceDir, signal))
+  );
+  const uploads = await Promise.all(
+    sources.map((source) => toFile(source.buffer, source.filename, { type: source.mimeType }))
+  );
+
+  const response = await rotatingClient.createImageEdit(
+    {
+      model: provider.use_model,
+      prompt: params.prompt,
+      image: uploads.length === 1 ? uploads[0] : uploads,
+    },
+    { signal, timeout: API_TIMEOUT_MS }
+  );
+
+  return saveImagesApiResponse(response, provider, workspaceDir, 'edited', signal);
 }
 
 /**
@@ -241,6 +434,14 @@ export async function executeImageGeneration(
       proxy,
       rotatingOptions: { maxRetries: 3, retryDelay: 1000 },
     });
+
+    const imageApiMode = getImageGenerationApiMode(provider, provider.use_model);
+    if (imageApiMode === 'images_generations') {
+      if (hasImages) {
+        return await executeImagesApiEdit(params, imageUris, provider, rotatingClient, workspaceDir, signal);
+      }
+      return await executeImagesApiGeneration(params, provider, rotatingClient, workspaceDir, signal);
+    }
 
     const completion: UnifiedChatCompletionResponse = await rotatingClient.createChatCompletion(
       { model: provider.use_model, messages: messages as any },
