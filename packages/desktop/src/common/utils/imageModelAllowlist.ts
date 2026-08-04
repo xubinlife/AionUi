@@ -45,6 +45,10 @@ const RULES: Array<{
     id: 'antigravity',
     match: (p) => !!p.name?.toLowerCase().includes('antigravity'),
   },
+  {
+    id: 'computingplatform',
+    match: (p) => !!p.base_url?.includes('computingplatform.com'),
+  },
 ];
 
 export const isImageGenSupported = (provider: ProviderShape, modelName: string): boolean => {
