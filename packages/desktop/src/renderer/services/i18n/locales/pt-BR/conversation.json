@@ -74,7 +74,9 @@
     "removeProjectConfirm": "Remover o projeto \"{{name}}\"? Suas {{count}} conversa(s) também serão removidas.",
     "newConversationInProject": "Novo chat neste projeto",
     "deleting": "Excluindo...",
-    "reorderPinned": "Arraste para reordenar a conversa fixada"
+    "reorderPinned": "Arraste para reordenar a conversa fixada",
+    "forkedFrom": "Bifurcada de “{{name}}”",
+    "forkedConversation": "Conversa bifurcada"
   },
   "historySearch": {
     "tooltip": "Pesquisar mensagens",
@@ -422,7 +424,8 @@
     "openWith": {
       "vscode": "VS Code",
       "terminal": "Terminal",
-      "explorer": "Explorador de Arquivos"
+      "explorer": "Explorador de Arquivos",
+      "browser": "Navegador"
     }
   },
   "minimap": {
