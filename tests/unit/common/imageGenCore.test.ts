@@ -8,7 +8,12 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve as pathResolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { processImageUri, saveGeneratedImage, executeImageGeneration } from '@/common/chat/imageGenCore';
+import {
+  processImageUri,
+  saveGeneratedImage,
+  executeImageGeneration,
+  normalizeImageSize,
+} from '@/common/chat/imageGenCore';
 
 let cleanupDirs: string[] = [];
 
@@ -50,6 +55,21 @@ const PNG_1x1 = Buffer.from(
 const DATA_URL_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
+describe('normalizeImageSize', () => {
+  it('should normalize common size formats', () => {
+    expect(normalizeImageSize('100x100')).toBe('100x100');
+    expect(normalizeImageSize('100X200')).toBe('100x200');
+    expect(normalizeImageSize('300 × 400')).toBe('300x400');
+    expect(normalizeImageSize('size: 512 * 768')).toBe('512x768');
+  });
+
+  it('should return undefined when no valid size is present', () => {
+    expect(normalizeImageSize(undefined)).toBeUndefined();
+    expect(normalizeImageSize('auto')).toBeUndefined();
+    expect(normalizeImageSize('0x100')).toBeUndefined();
+  });
+});
+
 describe('processImageUri', () => {
   it('should return image_url for an HTTP URL without filesystem access', async () => {
     const result = await processImageUri('https://example.com/photo.png', '/nonexistent');
@@ -62,7 +82,7 @@ describe('processImageUri', () => {
 
   it('should resolve a relative path within the workspace', async () => {
     const ws = createWorkspace();
-    const imgPath = createImageFile(ws, 'test.png');
+    createImageFile(ws, 'test.png');
 
     const result = await processImageUri('test.png', ws);
 
@@ -89,7 +109,6 @@ describe('processImageUri', () => {
 
   it('should block path traversal for ".." (parent without trailing path)', async () => {
     const ws = createWorkspace();
-    // ".." triggers relative !== '..' short-circuit branch in isWithin
     await expect(processImageUri('..', ws)).rejects.toThrow('Path traversal blocked');
   });
 
@@ -118,7 +137,6 @@ describe('processImageUri', () => {
 
   it('should resolve a "." path to the workspace directory itself', async () => {
     const ws = createWorkspace();
-    // "." resolves to workspace dir — isWithin returns true via relative === '' branch
     await expect(processImageUri('.', ws)).rejects.toThrow('not a supported image type');
   });
 
@@ -142,9 +160,6 @@ describe('processImageUri', () => {
 
   it('should block a symlink inside the workspace that points outside', async () => {
     const ws = createWorkspace();
-    // Secret image lives outside the workspace; a symlink inside the workspace
-    // points to it. The lexical containment check passes for the link path, but
-    // realpath must reveal the escape and block the read.
     const outsideDir = createWorkspace();
     const secretImg = createImageFile(outsideDir, 'secret.png');
     symlinkSync(secretImg, join(ws, 'linked.png'));
