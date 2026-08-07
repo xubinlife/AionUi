@@ -17,6 +17,7 @@ import { BUILTIN_IMAGE_GEN_ID, BUILTIN_IMAGE_GEN_NAME } from './constants';
 import { executeImageGeneration } from '@/common/chat/imageGenCore';
 import type { TProviderWithModel } from '@/common/config/storage';
 
+// Read provider config from environment variables
 function getProviderFromEnv(): TProviderWithModel | null {
   const platform = process.env.AIONUI_IMG_PLATFORM;
   const base_url = process.env.AIONUI_IMG_BASE_URL;
@@ -116,6 +117,9 @@ IMPORTANT: When user provides multiple images, ALWAYS pass ALL images to the ima
       }
 
       const proxy = process.env.AIONUI_IMG_PROXY || undefined;
+      // Trusted workspace root: the MCP server inherits the agent process cwd,
+      // which the backend sets to the conversation workspace. Never accept a
+      // workspace path from the model (path traversal boundary).
       const workspaceDir = process.cwd();
 
       const result = await executeImageGeneration({ prompt, image_uris, size }, provider, workspaceDir, proxy);
