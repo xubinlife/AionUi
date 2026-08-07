@@ -35,14 +35,11 @@ export class OpenAIRotatingClient extends RotatingApiClient<OpenAI> {
 
   protected getCurrentApiKey(): string | undefined {
     if (this.apiKeyManager?.hasMultipleKeys()) {
-      // For OpenAI, try to get from environment first
       return process.env.OPENAI_API_KEY || this.apiKeyManager.getCurrentKey();
     }
-    // Use base class method for single key
     return super.getCurrentApiKey();
   }
 
-  // Convenience methods for common OpenAI operations
   async createChatCompletion(
     params: OpenAI.Chat.Completions.ChatCompletionCreateParams,
     options?: OpenAI.RequestOptions
@@ -59,6 +56,15 @@ export class OpenAIRotatingClient extends RotatingApiClient<OpenAI> {
   ): Promise<OpenAI.Images.ImagesResponse> {
     return await this.executeWithRetry((client) => {
       return client.images.generate(params, options) as Promise<OpenAI.Images.ImagesResponse>;
+    });
+  }
+
+  async createImageEdit(
+    params: OpenAI.Images.ImageEditParams,
+    options?: OpenAI.RequestOptions
+  ): Promise<OpenAI.Images.ImagesResponse> {
+    return await this.executeWithRetry((client) => {
+      return client.images.edit(params, options) as Promise<OpenAI.Images.ImagesResponse>;
     });
   }
 
