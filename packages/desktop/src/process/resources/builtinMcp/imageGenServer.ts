@@ -17,7 +17,6 @@ import { BUILTIN_IMAGE_GEN_ID, BUILTIN_IMAGE_GEN_NAME } from './constants';
 import { executeImageGeneration } from '@/common/chat/imageGenCore';
 import type { TProviderWithModel } from '@/common/config/storage';
 
-// Read provider config from environment variables
 function getProviderFromEnv(): TProviderWithModel | null {
   const platform = process.env.AIONUI_IMG_PLATFORM;
   const base_url = process.env.AIONUI_IMG_BASE_URL;
@@ -65,10 +64,18 @@ When to Use (MANDATORY):
 - User asks to edit or modify an image
 - User mentions @filename with image extensions (.jpg, .jpeg, .png, .gif, .webp, .bmp, .tiff, .svg)
 
+Image Size Handling:
+- If the user explicitly specifies an output image size, you MUST pass it through the size parameter.
+- Normalize the requested dimensions to WIDTHxHEIGHT format, for example: "100x100", "512x512", or "1024x768".
+- Examples that should result in size="100x100": "generate a 100x100 image", "100 × 100 image", "100X100 image".
+- Do NOT invent a size when the user did not request one; omit the size parameter instead.
+- The configured image API ultimately decides which sizes are supported.
+
 Input Support:
 - Multiple local file paths in array format: ["img1.jpg", "img2.png"]
 - Multiple HTTP/HTTPS image URLs in array format
 - Text prompts for generation or analysis
+- Optional output image size in WIDTHxHEIGHT format
 
 Output:
 - Saves generated/processed images to workspace with timestamp naming
@@ -87,8 +94,14 @@ IMPORTANT: When user provides multiple images, ALWAYS pass ALL images to the ima
         .describe(
           'Optional: Array of paths to existing local image files or HTTP/HTTPS URLs to edit/modify. Examples: ["test.jpg", "https://example.com/img.png"]. For single image, use array format: ["test.jpg"]. Relative paths are resolved against the current working directory.'
         ),
+      size: z
+        .string()
+        .optional()
+        .describe(
+          'Optional output image size. When the user specifies dimensions, pass them in WIDTHxHEIGHT format, for example "100x100", "512x512", or "1024x768". Omit this parameter when the user does not request a specific output size.'
+        ),
     },
-    async ({ prompt, image_uris }) => {
+    async ({ prompt, image_uris, size }) => {
       const provider = getProviderFromEnv();
       if (!provider) {
         return {
@@ -103,12 +116,9 @@ IMPORTANT: When user provides multiple images, ALWAYS pass ALL images to the ima
       }
 
       const proxy = process.env.AIONUI_IMG_PROXY || undefined;
-      // Trusted workspace root: the MCP server inherits the agent process cwd,
-      // which the backend sets to the conversation workspace. Never accept a
-      // workspace path from the model (path traversal boundary).
       const workspaceDir = process.cwd();
 
-      const result = await executeImageGeneration({ prompt, image_uris }, provider, workspaceDir, proxy);
+      const result = await executeImageGeneration({ prompt, image_uris, size }, provider, workspaceDir, proxy);
 
       if (!result.success) {
         return {
