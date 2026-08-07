@@ -20,7 +20,7 @@ import type { UnifiedChatCompletionResponse } from '@/common/api/RotatingApiClie
 import { IMAGE_EXTENSIONS, MIME_TYPE_MAP, MIME_TO_EXT_MAP, DEFAULT_IMAGE_EXTENSION } from '@/common/config/constants';
 import { getImageGenerationApiMode } from '@/common/utils/imageModelAllowlist';
 
-const API_TIMEOUT_MS = 120000;
+const API_TIMEOUT_MS = 120000; // 2 minutes for image generation API calls
 const IMAGE_SIZE_PATTERN = /(\d{1,5})\s*(?:x|X|×|\*)\s*(\d{1,5})/;
 
 type ImageExtension = (typeof IMAGE_EXTENSIONS)[number];
@@ -32,6 +32,13 @@ const isWithin = (root: string, target: string): boolean => {
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 };
 
+/**
+ * Resolve `candidate` against `workspaceDir` and verify the result stays inside
+ * the workspace. A lexical containment check always applies; when the target
+ * exists, it is additionally canonicalized with `realpath` so symlinks inside
+ * the workspace cannot escape to arbitrary files outside it. Missing targets
+ * resolve lexically — the caller's existence check reports "not found".
+ */
 const resolveSafePath = async (workspaceDir: string, candidate: string): Promise<string> => {
   const resolved = path.resolve(workspaceDir, candidate);
   if (!isWithin(workspaceDir, resolved)) {
@@ -57,7 +64,10 @@ const resolveSafePath = async (workspaceDir: string, candidate: string): Promise
 // ===== Utility Functions =====
 
 export function safeJsonParse<T = unknown>(jsonString: string, fallbackValue: T): T {
-  if (!jsonString || typeof jsonString !== 'string') return fallbackValue;
+  if (!jsonString || typeof jsonString !== 'string') {
+    return fallbackValue;
+  }
+
   try {
     return JSON.parse(jsonString) as T;
   } catch (_error) {
@@ -107,27 +117,52 @@ export function getFileExtensionFromDataUrl(dataUrl: string): string {
   return DEFAULT_IMAGE_EXTENSION;
 }
 
+/**
+ * Normalize an image size into WIDTHxHEIGHT form.
+ *
+ * Supported examples:
+ * - 100x100
+ * - 100X100
+ * - 100×100
+ * - 100 * 100
+ */
 export function normalizeImageSize(size?: string): string | undefined {
-  if (!size || typeof size !== 'string') return undefined;
+  if (!size || typeof size !== 'string') {
+    return undefined;
+  }
+
   const match = size.match(IMAGE_SIZE_PATTERN);
-  if (!match) return undefined;
+  if (!match) {
+    return undefined;
+  }
+
   const width = Number(match[1]);
   const height = Number(match[2]);
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) return undefined;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    return undefined;
+  }
+
   return `${width}x${height}`;
 }
 
-async function saveGeneratedImageBuffer(imageBuffer: Buffer, workspaceDir: string, fileExtension: string): Promise<string> {
+async function saveGeneratedImageBuffer(
+  imageBuffer: Buffer,
+  workspaceDir: string,
+  fileExtension: string
+): Promise<string> {
   const timestamp = Date.now();
   const file_name = `img-${timestamp}${fileExtension}`;
   const resolvedDir = path.resolve(workspaceDir);
   const file_path = path.join(resolvedDir, file_name);
+
   try {
     await fs.promises.writeFile(file_path, imageBuffer);
     return file_path;
   } catch (error) {
     console.error('[ImageGen] Failed to save image file:', error);
-    throw new Error(`Failed to save image: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    throw new Error(`Failed to save image: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
   }
 }
 
@@ -145,45 +180,75 @@ function getFileExtensionFromRemoteImage(imageUrl: string, contentType: string |
     const extension = MIME_TO_EXT_MAP[subtype];
     if (extension) return extension;
   }
+
   try {
     const urlExtension = path.extname(new URL(imageUrl).pathname).toLowerCase();
-    if (IMAGE_EXTENSIONS.includes(urlExtension as ImageExtension)) return urlExtension;
-  } catch (_error) {}
+    if (IMAGE_EXTENSIONS.includes(urlExtension as ImageExtension)) {
+      return urlExtension;
+    }
+  } catch (_error) {
+    // Fall back to PNG when the URL cannot be parsed.
+  }
+
   return DEFAULT_IMAGE_EXTENSION;
 }
 
-async function saveGeneratedImageFromUrl(imageUrl: string, workspaceDir: string, signal?: AbortSignal): Promise<string> {
+async function saveGeneratedImageFromUrl(
+  imageUrl: string,
+  workspaceDir: string,
+  signal?: AbortSignal
+): Promise<string> {
   const response = await fetch(imageUrl, { signal });
   if (!response.ok) {
     throw new Error(`Failed to download generated image: HTTP ${response.status} ${response.statusText}`);
   }
+
   const imageBuffer = Buffer.from(await response.arrayBuffer());
   const fileExtension = getFileExtensionFromRemoteImage(imageUrl, response.headers.get('content-type'));
   return saveGeneratedImageBuffer(imageBuffer, workspaceDir, fileExtension);
 }
 
+// ===== Image Content Processing =====
+
 interface ImageContent {
   type: 'image_url';
-  image_url: { url: string; detail: 'auto' | 'low' | 'high' };
+  image_url: {
+    url: string;
+    detail: 'auto' | 'low' | 'high';
+  };
 }
 
 export async function processImageUri(imageUri: string, workspaceDir: string): Promise<ImageContent | null> {
   if (isHttpUrl(imageUri)) {
-    return { type: 'image_url', image_url: { url: imageUri, detail: 'auto' } };
+    return {
+      type: 'image_url',
+      image_url: { url: imageUri, detail: 'auto' },
+    };
   }
 
   let processedUri = imageUri;
-  if (imageUri.startsWith('@')) processedUri = imageUri.substring(1);
+  if (imageUri.startsWith('@')) {
+    processedUri = imageUri.substring(1);
+  }
+
   const fullPath = await resolveSafePath(workspaceDir, processedUri);
 
   try {
     await fs.promises.access(fullPath, fs.constants.F_OK);
-    if (!isImageFile(fullPath)) throw new Error(`File is not a supported image type: ${fullPath}`);
+
+    if (!isImageFile(fullPath)) {
+      throw new Error(`File is not a supported image type: ${fullPath}`);
+    }
+
     const base64Data = await fileToBase64(fullPath);
     const mimeType = getImageMimeType(fullPath);
-    return { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}`, detail: 'auto' } };
+    return {
+      type: 'image_url',
+      image_url: { url: `data:${mimeType};base64,${base64Data}`, detail: 'auto' },
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+
     if (
       errorMessage.includes('Path traversal blocked') ||
       errorMessage.includes('Image file not found') ||
@@ -191,6 +256,7 @@ export async function processImageUri(imageUri: string, workspaceDir: string): P
     ) {
       throw error;
     }
+
     const possiblePaths = [imageUri, path.resolve(workspaceDir, imageUri)].filter((p, i, arr) => arr.indexOf(p) === i);
     throw new Error(
       `Image file not found. Searched paths:\n${possiblePaths.map((p) => `- ${p}`).join('\n')}\n\nPlease ensure the image file exists and has a valid image extension (.jpg, .png, .gif, .webp, etc.)`,
@@ -205,23 +271,40 @@ interface ImageUploadSource {
   mimeType: string;
 }
 
-async function loadImageUploadSource(imageUri: string, workspaceDir: string, signal?: AbortSignal): Promise<ImageUploadSource> {
+async function loadImageUploadSource(
+  imageUri: string,
+  workspaceDir: string,
+  signal?: AbortSignal
+): Promise<ImageUploadSource> {
   if (isHttpUrl(imageUri)) {
     const response = await fetch(imageUri, { signal });
-    if (!response.ok) throw new Error(`Failed to download input image: HTTP ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`Failed to download input image: HTTP ${response.status} ${response.statusText}`);
+    }
+
     const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
     const mimeType = contentType?.startsWith('image/') ? contentType : 'image/png';
     let filename = 'input.png';
     try {
       filename = path.basename(new URL(imageUri).pathname) || filename;
-    } catch (_error) {}
-    return { buffer: Buffer.from(await response.arrayBuffer()), filename, mimeType };
+    } catch (_error) {
+      // Keep the default filename.
+    }
+
+    return {
+      buffer: Buffer.from(await response.arrayBuffer()),
+      filename,
+      mimeType,
+    };
   }
 
   const normalizedUri = imageUri.startsWith('@') ? imageUri.substring(1) : imageUri;
   const fullPath = await resolveSafePath(workspaceDir, normalizedUri);
   await fs.promises.access(fullPath, fs.constants.F_OK);
-  if (!isImageFile(fullPath)) throw new Error(`File is not a supported image type: ${fullPath}`);
+  if (!isImageFile(fullPath)) {
+    throw new Error(`File is not a supported image type: ${fullPath}`);
+  }
+
   return {
     buffer: await fs.promises.readFile(fullPath),
     filename: path.basename(fullPath),
@@ -229,9 +312,12 @@ async function loadImageUploadSource(imageUri: string, workspaceDir: string, sig
   };
 }
 
+// ===== Core Execution =====
+
 export interface ImageGenParams {
   prompt: string;
   image_uris?: string[] | string;
+  /** Optional output image size in WIDTHxHEIGHT format, for example 100x100. */
   size?: string;
 }
 
@@ -243,9 +329,16 @@ export interface ImageGenResult {
   error?: string;
 }
 
+/**
+ * Prefer the explicit tool argument, then fall back to extracting a size from
+ * the prompt. This allows requests such as "generate a 100x100 image" to work
+ * even if the calling model forgets to populate the size field.
+ */
 function resolveImageSize(params: ImageGenParams): string | undefined {
   const explicitSize = normalizeImageSize(params.size);
-  if (explicitSize) return explicitSize;
+  if (explicitSize) {
+    return explicitSize;
+  }
   return normalizeImageSize(params.prompt);
 }
 
@@ -258,7 +351,11 @@ async function saveImagesApiResponse(
 ): Promise<ImageGenResult> {
   const firstImage = response.data?.[0];
   if (!firstImage) {
-    return { success: false, text: `No image was returned by the Images API (${operation}).`, error: 'No image returned' };
+    return {
+      success: false,
+      text: `No image was returned by the Images API (${operation}).`,
+      error: 'No image returned',
+    };
   }
 
   let imagePath: string;
@@ -277,7 +374,11 @@ async function saveImagesApiResponse(
       imagePath = await saveGeneratedImageFromUrl(resolvedImageUrl, workspaceDir, signal);
     }
   } else {
-    return { success: false, text: 'Images API response contains neither b64_json nor url.', error: 'Invalid Images API response' };
+    return {
+      success: false,
+      text: 'Images API response contains neither b64_json nor url.',
+      error: 'Invalid Images API response',
+    };
   }
 
   const relativeImagePath = path.relative(workspaceDir, imagePath);
@@ -300,6 +401,7 @@ async function executeImagesApiGeneration(
   if (!('createImage' in rotatingClient)) {
     throw new Error(`Provider ${provider.platform} does not support the OpenAI Images API client.`);
   }
+
   const imageSize = resolveImageSize(params);
   const response = await rotatingClient.createImage(
     {
@@ -309,6 +411,7 @@ async function executeImagesApiGeneration(
     },
     { signal, timeout: API_TIMEOUT_MS }
   );
+
   return saveImagesApiResponse(response, provider, workspaceDir, 'generated', signal);
 }
 
@@ -323,9 +426,15 @@ async function executeImagesApiEdit(
   if (!('createImageEdit' in rotatingClient)) {
     throw new Error(`Provider ${provider.platform} does not support the OpenAI Images Edit API client.`);
   }
-  const sources = await Promise.all(imageUris.map((imageUri) => loadImageUploadSource(imageUri, workspaceDir, signal)));
-  const uploads = await Promise.all(sources.map((source) => toFile(source.buffer, source.filename, { type: source.mimeType })));
+
+  const sources = await Promise.all(
+    imageUris.map((imageUri) => loadImageUploadSource(imageUri, workspaceDir, signal))
+  );
+  const uploads = await Promise.all(
+    sources.map((source) => toFile(source.buffer, source.filename, { type: source.mimeType }))
+  );
   const imageSize = resolveImageSize(params);
+
   const response = await rotatingClient.createImageEdit(
     {
       model: provider.use_model,
@@ -335,9 +444,13 @@ async function executeImagesApiEdit(
     },
     { signal, timeout: API_TIMEOUT_MS }
   );
+
   return saveImagesApiResponse(response, provider, workspaceDir, 'edited', signal);
 }
 
+/**
+ * Core image generation function shared between MCP server and Gemini tool.
+ */
 export async function executeImageGeneration(
   params: ImageGenParams,
   provider: TProviderWithModel,
@@ -349,7 +462,10 @@ export async function executeImageGeneration(
     return { success: false, text: 'Image generation was cancelled.', error: 'cancelled' };
   }
 
+  // Resolve and validate workspaceDir once to prevent path traversal.
   const resolvedWorkspaceDir = path.resolve(workspaceDir);
+  // fs.realpath would reject if the directory does not exist, but we should
+  // fail fast so the caller gets a clear error rather than a cascade.
   let stat: fs.Stats;
   try {
     stat = await fs.promises.stat(resolvedWorkspaceDir);
@@ -369,6 +485,7 @@ export async function executeImageGeneration(
   }
 
   try {
+    // Parse image URIs
     let imageUris: string[] = [];
     if (params.image_uris) {
       if (typeof params.image_uris === 'string') {
@@ -382,16 +499,24 @@ export async function executeImageGeneration(
     const hasImages = imageUris.length > 0;
     const imageSize = resolveImageSize(params);
     const sizeInstruction = imageSize ? ` Output image size: ${imageSize}.` : '';
-    const enhancedPrompt = hasImages
-      ? `Analyze/Edit image: ${params.prompt}${sizeInstruction}`
-      : `Generate image: ${params.prompt}${sizeInstruction}`;
+    let enhancedPrompt: string;
+    if (hasImages) {
+      enhancedPrompt = `Analyze/Edit image: ${params.prompt}${sizeInstruction}`;
+    } else {
+      enhancedPrompt = `Generate image: ${params.prompt}${sizeInstruction}`;
+    }
 
     const contentParts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: enhancedPrompt }];
 
+    // Process image URIs
     if (hasImages) {
-      const imageResults = await Promise.allSettled(imageUris.map((uri) => processImageUri(uri, resolvedWorkspaceDir)));
+      const imageResults = await Promise.allSettled(
+        imageUris.map((uri) => processImageUri(uri, resolvedWorkspaceDir))
+      );
+
       const successful: ImageContent[] = [];
       const errors: string[] = [];
+
       imageResults.forEach((result, index) => {
         if (result.status === 'fulfilled' && result.value) {
           successful.push(result.value);
@@ -401,14 +526,21 @@ export async function executeImageGeneration(
           errors.push(`Image ${index + 1} (${imageUris[index]}): ${errorMessage}`);
         }
       });
+
       successful.forEach((imageContent) => contentParts.push(imageContent));
+
       if (successful.length === 0) {
-        return { success: false, text: `Error: Failed to process any images. Errors:\n${errors.join('\n')}`, error: errors.join('\n') };
+        return {
+          success: false,
+          text: `Error: Failed to process any images. Errors:\n${errors.join('\n')}`,
+          error: errors.join('\n'),
+        };
       }
     }
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [{ role: 'user', content: contentParts }];
 
+    // Create client and call API
     const rotatingClient: RotatingClient = await ClientFactory.createRotatingClient(provider, {
       proxy,
       rotatingOptions: { maxRetries: 3, retryDelay: 1000 },
@@ -417,7 +549,14 @@ export async function executeImageGeneration(
     const imageApiMode = getImageGenerationApiMode(provider, provider.use_model);
     if (imageApiMode === 'images_generations') {
       if (hasImages) {
-        return await executeImagesApiEdit(params, imageUris, provider, rotatingClient, resolvedWorkspaceDir, signal);
+        return await executeImagesApiEdit(
+          params,
+          imageUris,
+          provider,
+          rotatingClient,
+          resolvedWorkspaceDir,
+          signal
+        );
       }
       return await executeImagesApiGeneration(params, provider, rotatingClient, resolvedWorkspaceDir, signal);
     }
@@ -428,16 +567,22 @@ export async function executeImageGeneration(
     );
 
     const choice = completion.choices[0];
-    if (!choice) return { success: false, text: 'No response from image generation API', error: 'No response' };
+    if (!choice) {
+      return { success: false, text: 'No response from image generation API', error: 'No response' };
+    }
 
     const responseText = choice.message.content || 'Image generated successfully.';
     let images = choice.message.images;
 
+    // Extract images from markdown in content if not in images field
     if ((!images || images.length === 0) && responseText) {
       const dataUrlRegex = /!\[[^\]]*\]\((data:image\/[^;]+;base64,[^)]+)\)/g;
       const dataUrlMatches = [...responseText.matchAll(dataUrlRegex)];
       if (dataUrlMatches.length > 0) {
-        images = dataUrlMatches.map((match) => ({ type: 'image_url' as const, image_url: { url: match[1] } }));
+        images = dataUrlMatches.map((match) => ({
+          type: 'image_url' as const,
+          image_url: { url: match[1] },
+        }));
       } else {
         const file_pathRegex = /!\[[^\]]*\]\(([^)]+\.(?:jpg|jpeg|png|gif|webp|bmp|tiff|svg))\)/gi;
         const file_pathMatches = [...responseText.matchAll(file_pathRegex)];
@@ -450,12 +595,17 @@ export async function executeImageGeneration(
               await fs.promises.access(fullPath);
               const base64Data = await fileToBase64(fullPath);
               const mimeType = getImageMimeType(fullPath);
-              processedImages.push({ type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } });
+              processedImages.push({
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64Data}` },
+              });
             } catch (_fileError) {
               console.warn(`[ImageGen] Could not load image file: ${file_path}`);
             }
           }
-          if (processedImages.length > 0) images = processedImages;
+          if (processedImages.length > 0) {
+            images = processedImages;
+          }
         }
       }
     }
@@ -469,7 +619,17 @@ export async function executeImageGeneration(
     if (firstImage.type === 'image_url' && firstImage.image_url?.url) {
       const imagePath = await saveGeneratedImage(firstImage.image_url.url, resolvedWorkspaceDir);
       const relativeImagePath = path.relative(resolvedWorkspaceDir, imagePath);
-      const cleanText = responseText.replace(/!\[[^\]]*\]\(data:image\/[^;]+;base64,[^)]+\)/g, '[embedded image extracted]');
+
+      // Strip any inline base64 data URLs from the human-readable text before
+      // returning. The image is already saved to disk and referenced by path,
+      // so re-emitting hundreds of MB of base64 in the MCP tool response just
+      // forces the parent process to ship that payload through framed TCP again
+      // (which is where the 2026-04-14 commit-charge blow-up happened).
+      const cleanText = responseText.replace(
+        /!\[[^\]]*\]\(data:image\/[^;]+;base64,[^)]+\)/g,
+        '[embedded image extracted]'
+      );
+
       return {
         success: true,
         text: `${cleanText}\n\nGenerated image saved to: ${imagePath}`,
@@ -480,7 +640,9 @@ export async function executeImageGeneration(
 
     return { success: true, text: responseText };
   } catch (error) {
-    if (signal?.aborted) return { success: false, text: 'Image generation was cancelled.', error: 'cancelled' };
+    if (signal?.aborted) {
+      return { success: false, text: 'Image generation was cancelled.', error: 'cancelled' };
+    }
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`[ImageGen] API call failed:`, error);
     return { success: false, text: `Error generating image: ${errorMessage}`, error: errorMessage };
