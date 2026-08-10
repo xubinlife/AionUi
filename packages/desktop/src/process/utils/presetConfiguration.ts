@@ -34,7 +34,7 @@ type PresetAssistantConfiguration = {
 };
 
 export type PresetConfiguration = {
-  provider: CreateProviderRequest;
+  provider: Omit<CreateProviderRequest, 'api_key'>;
   defaultModel: string;
   mcp: PresetMcpConfiguration;
   skill: PresetSkillConfiguration;
@@ -42,9 +42,17 @@ export type PresetConfiguration = {
 };
 
 /**
+ * aionCore currently requires a non-empty API key when a non-Bedrock provider
+ * row is created. This value is deliberately not a credential: it only lets us
+ * materialize the preset provider so the user can see it and replace this marker
+ * with their own API key in Settings.
+ */
+export const PRESET_API_KEY_PLACEHOLDER = '__AIONUI_USER_API_KEY_REQUIRED__';
+
+/**
  * Deployment-specific preset values.
  *
- * Keep user credentials empty here. The packaged application should only carry
+ * Do not add user credentials here. The packaged application should only carry
  * non-sensitive connection metadata; each user fills the model API key and MCP
  * Authorization header in the existing Settings UI after installation.
  *
@@ -60,7 +68,6 @@ export const PRESET_CONFIGURATION: PresetConfiguration = {
     platform: 'new-api',
     name: '计算平台模型服务',
     base_url: '',
-    api_key: '',
     models: [],
     enabled: true,
   },
@@ -135,6 +142,7 @@ function buildPresetMcpServer(config: PresetConfiguration): PresetMcpServer {
     name: config.mcp.name,
     description: config.mcp.description,
     enabled: config.mcp.enabled,
+    // Keep this editable: the user must add their Authorization header.
     builtin: false,
     transport,
     original_json: JSON.stringify({ mcpServers: { [config.mcp.name]: serverConfig } }, null, 2),
@@ -150,8 +158,7 @@ async function ensurePresetProvider(config: PresetConfiguration): Promise<void> 
 
   await ipcBridge.mode.createProvider.invoke({
     ...config.provider,
-    // Never package a shared credential.
-    api_key: '',
+    api_key: PRESET_API_KEY_PLACEHOLDER,
   });
 }
 
