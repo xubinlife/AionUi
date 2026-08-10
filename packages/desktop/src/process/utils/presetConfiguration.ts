@@ -127,22 +127,26 @@ export function getPresetConfigurationValidationErrors(config: PresetConfigurati
 }
 
 function buildPresetMcpServer(config: PresetConfiguration): PresetMcpServer {
+  const headers = {
+    // Pre-create the header key so users only need to fill its value.
+    Authorization: '',
+  };
   const transport = {
     type: 'http' as const,
     url: config.mcp.url,
-    // Authorization is intentionally absent. Each user fills it in Settings.
-    headers: {},
+    headers,
   };
   const serverConfig = {
     type: 'streamable_http',
     url: config.mcp.url,
+    headers,
   };
 
   return {
     name: config.mcp.name,
     description: config.mcp.description,
     enabled: config.mcp.enabled,
-    // Keep this editable: the user must add their Authorization header.
+    // Keep this editable: the user must fill their Authorization header.
     builtin: false,
     transport,
     original_json: JSON.stringify({ mcpServers: { [config.mcp.name]: serverConfig } }, null, 2),
