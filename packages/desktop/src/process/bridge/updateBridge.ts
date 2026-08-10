@@ -63,8 +63,8 @@ interface AutoUpdateCheckParams {
 const DEFAULT_REPO = 'iOfficeAI/AionUi';
 const DEFAULT_USER_AGENT = 'AionUi';
 const ALLOWED_ASSET_EXTS = new Set(['.exe', '.msi', '.dmg', '.zip', '.deb', '.rpm']);
-const CDN_HOST = 'static.aionui.com';
-const CDN_BASE_URL = `https://${CDN_HOST}/releases`;
+const CDN_HOST = 'mirrors.computingplatform.com';
+const CDN_BASE_URL = 'https://mirrors.computingplatform.com/repository/files/software/AionUi/releases';
 const ALLOWED_DOWNLOAD_HOSTS = new Set<string>([
   CDN_HOST,
   'github.com',
