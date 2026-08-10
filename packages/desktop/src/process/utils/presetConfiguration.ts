@@ -474,7 +474,7 @@ async function ensurePresetSkills(config: PresetConfiguration): Promise<string[]
     });
     return importedNames;
   } finally {
-    await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
+    await rm(tempRoot, { recursive: true, force: true }).catch((): undefined => undefined);
   }
 }
 
