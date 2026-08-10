@@ -5,6 +5,7 @@ import type { PresetConfiguration } from '@/process/utils/presetConfiguration';
 import {
   ensurePresetConfiguration,
   getPresetConfigurationValidationErrors,
+  PRESET_API_KEY_PLACEHOLDER,
 } from '@/process/utils/presetConfiguration';
 
 const {
@@ -72,7 +73,6 @@ const validConfig = (): PresetConfiguration => ({
     platform: 'new-api',
     name: '计算平台模型服务',
     base_url: 'https://models.example.test/v1',
-    api_key: 'must-not-be-packaged',
     models: ['qwen-test'],
     enabled: true,
   },
@@ -153,7 +153,7 @@ describe('getPresetConfigurationValidationErrors', () => {
 });
 
 describe('ensurePresetConfiguration', () => {
-  it('creates missing resources without packaging model or MCP credentials', async () => {
+  it('creates missing resources without packaging user model or MCP credentials', async () => {
     const config = validConfig();
 
     await expect(ensurePresetConfiguration(config)).resolves.toBe(true);
@@ -162,10 +162,11 @@ describe('ensurePresetConfiguration', () => {
       expect.objectContaining({
         id: 'computing-platform',
         base_url: 'https://models.example.test/v1',
-        api_key: '',
+        api_key: PRESET_API_KEY_PLACEHOLDER,
         models: ['qwen-test'],
       })
     );
+    expect(PRESET_API_KEY_PLACEHOLDER).toBe('__AIONUI_USER_API_KEY_REQUIRED__');
 
     expect(batchImportServersMock).toHaveBeenCalledWith({
       servers: [
