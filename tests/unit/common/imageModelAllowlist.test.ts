@@ -29,15 +29,15 @@ describe('isImageGenSupported', () => {
     expect(isImageGenSupported(provider, 'gemini-3-pro-image-1x1')).toBe(true);
   });
 
+  it('accepts OpenAI-compatible image models through the Images API', () => {
+    const provider = { platform: 'custom', base_url: 'https://api.openai.com/v1', name: 'OpenAI' };
+    expect(isImageGenSupported(provider, 'gpt-image-1')).toBe(true);
+    expect(isImageGenSupported(provider, 'dall-e-3')).toBe(true);
+  });
+
   it('rejects models without an image-style suffix even on supported providers', () => {
     const provider = { platform: 'gemini', name: 'Gemini' };
     expect(isImageGenSupported(provider, 'gemini-2.5-pro')).toBe(false);
-  });
-
-  it('rejects providers that look like image-capable but are not on the allowlist', () => {
-    const provider = { platform: 'custom', base_url: 'https://api.openai.com/v1', name: 'OpenAI' };
-    expect(isImageGenSupported(provider, 'gpt-image-1')).toBe(false);
-    expect(isImageGenSupported(provider, 'dall-e-3')).toBe(false);
   });
 
   it('rejects unknown providers regardless of model name', () => {

@@ -4,32 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { AuthType } from '@/common/types/provider/authType';
+import { getProviderAuthType } from '@/common/utils/platformAuthType';
+
 /**
- * Allowlist for built-in image generation tool.
+ * API mode used by the built-in image generation tool.
  *
- * The tool currently only supports "form B" — OpenAI chat completions multimodal
- * output (model returns images via `message.images` or markdown). It does NOT
- * support "form A" (`/v1/images/generations` endpoint) or async/polling APIs.
- *
- * Model selection therefore must be a platform+model allowlist of providers
- * known to work, rather than a coarse name-substring match. Otherwise users
- * see options like `gpt-image-1` / `dall-e-3` / `sd-3.5` in the dropdown that
- * are guaranteed to fail at runtime.
- *
- * Rules below mirror `useConfigModelListWithImage.ts` — the same providers we
- * auto-supplement with default image models. When #6 lands a form-A adapter,
- * extend this list accordingly.
+ * - chat_completions: multimodal chat model returns images through message.images
+ *   or markdown data URLs.
+ * - images_generations: OpenAI-compatible POST /v1/images/generations.
  */
+export type ImageGenerationApiMode = 'chat_completions' | 'images_generations';
 
 type ProviderShape = {
   platform?: string;
   base_url?: string;
   name?: string;
+  model_protocols?: Record<string, string>;
 };
 
-const IMAGE_NAME_PATTERN = /(image|banana|imagine)/i;
+const CHAT_IMAGE_NAME_PATTERN = /(image|banana|imagine)/i;
+const IMAGES_API_MODEL_PATTERN = /(image|imagine|dall|flux|diffusion|cogview|imagen)/i;
 
-const RULES: Array<{
+/** Providers whose image-capable models generate through chat completions. */
+const CHAT_COMPLETIONS_RULES: Array<{
   id: string;
   match: (provider: ProviderShape) => boolean;
 }> = [
@@ -47,7 +45,33 @@ const RULES: Array<{
   },
 ];
 
+/**
+ * Resolve how the selected provider/model must be invoked.
+ *
+ * Existing Gemini/OpenRouter/Antigravity behavior takes priority. Other
+ * OpenAI-compatible providers with an image-model name use Images API.
+ */
+export const getImageGenerationApiMode = (
+  provider: ProviderShape,
+  modelName: string
+): ImageGenerationApiMode | null => {
+  if (CHAT_IMAGE_NAME_PATTERN.test(modelName) && CHAT_COMPLETIONS_RULES.some((rule) => rule.match(provider))) {
+    return 'chat_completions';
+  }
+
+  if (!IMAGES_API_MODEL_PATTERN.test(modelName)) {
+    return null;
+  }
+
+  const authType = getProviderAuthType({
+    platform: provider.platform || '',
+    model_protocols: provider.model_protocols,
+    use_model: modelName,
+  });
+
+  return authType === AuthType.USE_OPENAI ? 'images_generations' : null;
+};
+
 export const isImageGenSupported = (provider: ProviderShape, modelName: string): boolean => {
-  if (!IMAGE_NAME_PATTERN.test(modelName)) return false;
-  return RULES.some((rule) => rule.match(provider));
+  return getImageGenerationApiMode(provider, modelName) !== null;
 };
