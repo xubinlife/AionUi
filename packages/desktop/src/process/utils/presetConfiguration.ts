@@ -115,10 +115,13 @@ type PresetMcpServer = Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transpor
 
 export function getPresetConfigurationValidationErrors(config: PresetConfiguration): string[] {
   const errors: string[] = [];
+  const models = config.provider.models ?? [];
+  const defaultModel = config.defaultModel.trim();
+
   if (!config.provider.base_url.trim()) errors.push('provider.base_url');
-  if (!config.provider.models || config.provider.models.length === 0) errors.push('provider.models');
-  if (!config.defaultModel.trim()) errors.push('defaultModel');
-  if (config.provider.models && !config.provider.models.includes(config.defaultModel)) {
+  if (models.length === 0) errors.push('provider.models');
+  if (!defaultModel) errors.push('defaultModel');
+  if (defaultModel && models.length > 0 && !models.includes(config.defaultModel)) {
     errors.push('defaultModel must exist in provider.models');
   }
   if (!config.mcp.url.trim()) errors.push('mcp.url');
