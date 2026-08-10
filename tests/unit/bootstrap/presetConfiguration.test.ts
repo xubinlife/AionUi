@@ -194,10 +194,11 @@ describe('ensurePresetConfiguration', () => {
     expect(createAssistantMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'computing-platform-assistant',
+        enabled_skills: [],
         custom_skill_names: ['computing-platform'],
         defaults: {
           model: { mode: 'fixed', value: 'qwen-test' },
-          skills: { mode: 'fixed', value: ['computing-platform'] },
+          skills: { mode: 'fixed', value: [] },
           mcps: { mode: 'fixed', value: ['mcp-preset-id'] },
         },
       })
