@@ -49,13 +49,9 @@ vi.mock('@/process/utils/migrateAssistants', () => ({
   migrateAssistantsToBackend: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock('@/process/utils/presetConfiguration', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/process/utils/presetConfiguration')>();
-  return {
-    ...actual,
-    ensurePresetConfiguration: vi.fn().mockResolvedValue(true),
-  };
-});
+vi.mock('@/process/utils/presetConfiguration', () => ({
+  ensurePresetConfiguration: vi.fn().mockResolvedValue(true),
+}));
 
 const provider: IProvider = {
   id: 'provider-1',
