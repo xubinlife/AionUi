@@ -18,7 +18,6 @@ import {
 import { BUILTIN_IMAGE_GEN_NAME, type IMcpServer, type IProvider } from '@/common/config/storage';
 import { getBuiltinMcpScriptPath, type ProcessConfig as ProcessConfigType } from './initStorage';
 import { migrateAssistantsToBackend } from './migrateAssistants';
-import { ensurePresetConfiguration } from './presetConfiguration';
 
 type ConfigFile = typeof ProcessConfigType;
 type MigrationStepResult = boolean;
@@ -460,7 +459,6 @@ const MIGRATION_STEPS: Array<{
     run: async (configFile) => (await ensureBootstrapMcpServersInDb(configFile), true),
   },
   { name: 'migrateAssistantsToBackend', run: async (configFile) => migrateAssistantsToBackend(configFile) },
-  { name: 'ensurePresetConfiguration', run: async () => ensurePresetConfiguration() },
 ];
 
 async function syncBuiltinMcpConfig(configFile: ConfigFile): Promise<void> {
