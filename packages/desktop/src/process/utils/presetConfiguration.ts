@@ -358,13 +358,17 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
 }
 
+function uniqueNames(names: string[]): string[] {
+  return [...new Set(names)];
+}
+
 async function loadSkillPresetState(): Promise<SkillPresetState> {
   try {
     const settings = (await httpRequest<Record<string, unknown>>('GET', '/api/settings/client')) || {};
     const rawVersion = settings[SKILL_VERSION_SETTING_KEY];
     return {
       version: typeof rawVersion === 'string' ? rawVersion : undefined,
-      names: asStringArray(settings[SKILL_NAMES_SETTING_KEY]),
+      names: uniqueNames(asStringArray(settings[SKILL_NAMES_SETTING_KEY])),
     };
   } catch (error) {
     log.warn('[preset-skills] failed to read local Skill preset state', error);
@@ -375,33 +379,59 @@ async function loadSkillPresetState(): Promise<SkillPresetState> {
 async function saveSkillPresetState(version: string, names: string[]): Promise<void> {
   await httpRequest<void>('PUT', '/api/settings/client', {
     [SKILL_VERSION_SETTING_KEY]: version,
-    [SKILL_NAMES_SETTING_KEY]: names,
+    [SKILL_NAMES_SETTING_KEY]: uniqueNames(names),
   });
 }
 
 async function resolveManagedSkillNames(config: PresetConfiguration, stateNames: string[]): Promise<string[]> {
-  if (stateNames.length > 0) return stateNames;
+  const available = await adapter.fs.listAvailableSkills.invoke();
+  const availableCustomNames = new Set(
+    (available ?? []).filter((skill) => skill.source === 'custom').map((skill) => skill.name)
+  );
+
+  if (stateNames.length > 0) {
+    return uniqueNames(stateNames).filter((name) => availableCustomNames.has(name));
+  }
   if (!config.skills.name_prefix) return [];
 
-  const available = await adapter.fs.listAvailableSkills.invoke();
-  return (available ?? [])
-    .filter((skill) => skill.source === 'custom' && skill.name.startsWith(config.skills.name_prefix || ''))
-    .map((skill) => skill.name);
+  return [...availableCustomNames].filter((name) => name.startsWith(config.skills.name_prefix || ''));
 }
 
 function getImportedSkillNames(result: SkillImportResult): string[] {
-  const names = asStringArray(result.skill_names);
+  const names = uniqueNames(asStringArray(result.skill_names));
   if (names.length > 0) return names;
   return typeof result.skill_name === 'string' && result.skill_name.length > 0 ? [result.skill_name] : [];
 }
 
+async function removeStaleManagedSkills(previousNames: string[], importedNames: string[]): Promise<string[]> {
+  const nextNames = new Set(importedNames);
+  const staleNames = uniqueNames(previousNames).filter((name) => !nextNames.has(name));
+
+  for (const skillName of staleNames) {
+    await adapter.fs.deleteSkill.invoke({ skill_name: skillName });
+  }
+  return staleNames;
+}
+
+/**
+ * The remote ZIP is a complete snapshot, not an incremental patch.
+ * Existing same-name Skills are overwritten by AionUi's import service; after a
+ * successful import, Skills that belonged to the previous managed snapshot but
+ * are absent from the new archive are deleted before the new version is saved.
+ */
 async function ensurePresetSkills(config: PresetConfiguration): Promise<string[]> {
   const state = await loadSkillPresetState();
-  let currentNames = await resolveManagedSkillNames(config, state.names);
+  const currentNames = await resolveManagedSkillNames(config, state.names);
   if (!config.skills.update.enabled) return currentNames;
 
   const release = await fetchLatestSkillRelease(config.skills.update);
-  if (state.version && isValidSemver(state.version) && !gt(release.version, state.version)) {
+  const installedSnapshotComplete = state.names.length > 0 && currentNames.length === uniqueNames(state.names).length;
+  if (
+    state.version &&
+    isValidSemver(state.version) &&
+    !gt(release.version, state.version) &&
+    installedSnapshotComplete
+  ) {
     log.info('[preset-skills] Skill package is up to date', {
       installedVersion: state.version,
       latestVersion: release.version,
@@ -415,7 +445,7 @@ async function ensurePresetSkills(config: PresetConfiguration): Promise<string[]
   try {
     await writeFile(archivePath, archive);
     // AionUi's existing Skill import service accepts ZIP files directly and owns
-    // extraction, validation, overwrite handling and import-history recording.
+    // extraction, validation, same-name overwrite handling and import history.
     const result = (await adapter.fs.importSkills.invoke({ skill_path: archivePath })) as SkillImportResult;
     if ((result.failed ?? []).length > 0) {
       throw new Error(`Skill import reported ${(result.failed ?? []).length} failed item(s)`);
@@ -426,11 +456,12 @@ async function ensurePresetSkills(config: PresetConfiguration): Promise<string[]
       throw new Error('Skill archive import returned no Skill names');
     }
 
-    currentNames = importedNames;
+    const staleNames = await removeStaleManagedSkills(currentNames, importedNames);
     await saveSkillPresetState(release.version, importedNames);
-    log.info('[preset-skills] Skill package installed', {
+    log.info('[preset-skills] Skill snapshot installed', {
       version: release.version,
       skills: importedNames,
+      removed: staleNames,
     });
     return importedNames;
   } finally {
@@ -462,11 +493,6 @@ async function ensurePresetAssistant(
     return;
   }
 
-  if (config.skills.enabled && skillNames.length === 0) {
-    log.warn('[Preset] assistant creation deferred because preset Skills are enabled but unavailable');
-    return;
-  }
-
   const request: CreateAssistantRequest = {
     id: config.assistant.id,
     name: config.assistant.name,
@@ -474,7 +500,7 @@ async function ensurePresetAssistant(
     avatar: config.assistant.avatar,
     agent_id: config.assistant.agent_id,
     enabled_skills: [],
-    custom_skill_names: config.skills.enabled ? skillNames : [],
+    custom_skill_names: config.skills.enabled && skillNames.length > 0 ? skillNames : [],
     recommended_prompts: config.assistant.recommended_prompts,
     defaults: {
       model: { mode: 'fixed', value: config.assistant.default_model },
@@ -494,7 +520,11 @@ async function ensurePresetAssistant(
 /**
  * Idempotently installs the enterprise preset without overwriting user-entered
  * Provider/MCP credentials or customized existing resources. Remote Skills are
- * the exception: they are explicitly version-managed by the configured mirror.
+ * version-managed as full snapshots by the configured mirror.
+ *
+ * Skill update failures are deliberately fail-open for the rest of the preset:
+ * Provider, MCP and Assistant setup still completes, while the Assistant receives
+ * no preset Skill bindings for this bootstrap run.
  */
 export async function ensurePresetConfiguration(loadedPreset?: LoadedPresetConfiguration): Promise<boolean> {
   const loaded = loadedPreset ?? (await loadPresetConfiguration());
@@ -512,9 +542,12 @@ export async function ensurePresetConfiguration(loadedPreset?: LoadedPresetConfi
   try {
     skillNames = await ensurePresetSkills(config);
   } catch (error) {
-    log.warn('[preset-skills] Skill update failed; keeping the currently installed Skills', error);
-    const state = await loadSkillPresetState();
-    skillNames = await resolveManagedSkillNames(config, state.names);
+    // Never let a mirror/network/archive/import failure block the rest of the
+    // preset. Do not fall back to previously recorded names here: the current
+    // bootstrap must create the Assistant without Skill bindings when the
+    // managed snapshot cannot be confirmed.
+    log.warn('[preset-skills] Skill snapshot unavailable; continuing without preset Skill bindings', error);
+    skillNames = [];
   }
 
   await ensurePresetAssistant(config, mcpServer, skillNames, rules);
