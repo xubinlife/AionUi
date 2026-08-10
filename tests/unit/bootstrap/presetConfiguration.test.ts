@@ -119,7 +119,7 @@ beforeEach(() => {
   listAvailableSkillsMock.mockResolvedValue([]);
   listAssistantsMock.mockResolvedValue([]);
   createProviderMock.mockResolvedValue(undefined);
-  batchImportServersMock.mockResolvedValue([presetMcpServer()]);
+  batchImportServersMock.mockResolvedValue([presetMcpServer({ Authorization: '' })]);
   importSkillsMock.mockResolvedValue({ skill_name: 'computing-platform' });
   createAssistantMock.mockResolvedValue(undefined);
   mkdtempMock.mockResolvedValue('/tmp/aionui-preset-skill-test');
@@ -176,15 +176,15 @@ describe('ensurePresetConfiguration', () => {
           transport: {
             type: 'http',
             url: 'https://mcp.example.test/mcp',
-            headers: {},
+            headers: { Authorization: '' },
           },
         }),
       ],
     });
 
     const importedMcp = batchImportServersMock.mock.calls[0][0].servers[0];
-    expect(importedMcp.original_json).not.toContain('Authorization');
-    expect(importedMcp.original_json).not.toContain('Bearer');
+    expect(importedMcp.original_json).toContain('"Authorization": ""');
+    expect(importedMcp.original_json).not.toContain('Bearer ');
 
     expect(writeFileMock).toHaveBeenCalledWith(
       '/tmp/aionui-preset-skill-test/computing-platform/SKILL.md',
