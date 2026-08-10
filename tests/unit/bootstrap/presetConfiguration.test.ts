@@ -257,14 +257,7 @@ describe('resolveSkillRelease', () => {
 
     expect(
       resolveSkillRelease(
-        [
-          'version: 0.0.2',
-          'files:',
-          '  - url: SKILL-0.0.2.zip',
-          '    sha512: abc123',
-          '    size: 123',
-          '',
-        ].join('\n'),
+        ['version: 0.0.2', 'files:', '  - url: SKILL-0.0.2.zip', '    sha512: abc123', '    size: 123', ''].join('\n'),
         config
       )
     ).toEqual({
@@ -312,10 +305,7 @@ describe('ensurePresetConfiguration', () => {
     expect(importSkillsMock).toHaveBeenCalledWith({
       skill_path: '/tmp/aionui-preset-skills-test/SKILL-0.0.1.zip',
     });
-    expect(writeFileMock).toHaveBeenCalledWith(
-      '/tmp/aionui-preset-skills-test/SKILL-0.0.1.zip',
-      expect.any(Buffer)
-    );
+    expect(writeFileMock).toHaveBeenCalledWith('/tmp/aionui-preset-skills-test/SKILL-0.0.1.zip', expect.any(Buffer));
     expect(deleteSkillMock).not.toHaveBeenCalled();
     expect(httpRequestMock).toHaveBeenCalledWith('PUT', '/api/settings/client', {
       'preset.computingPlatform.skills.version': '0.0.1',
@@ -408,10 +398,7 @@ describe('ensurePresetConfiguration', () => {
       if (method === 'GET' && requestPath === '/api/settings/client') {
         return {
           'preset.computingPlatform.skills.version': '0.0.1',
-          'preset.computingPlatform.skills.names': [
-            'computing-platform-tasks',
-            'computing-platform-resources',
-          ],
+          'preset.computingPlatform.skills.names': ['computing-platform-tasks', 'computing-platform-resources'],
         };
       }
       return undefined;

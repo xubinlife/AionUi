@@ -184,7 +184,9 @@ export function getPresetConfigurationValidationErrors(config: PresetConfigurati
   return errors;
 }
 
-function buildPresetMcpServer(config: PresetConfiguration): Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'> {
+function buildPresetMcpServer(
+  config: PresetConfiguration
+): Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'> {
   const headers = config.mcp.headers ?? { Authorization: '' };
   const transport = {
     type: 'http' as const,
@@ -261,7 +263,8 @@ export function resolveSkillRelease(
     throw new Error(`Invalid Skill release version: ${version || '<empty>'}`);
   }
 
-  const file = manifest.files?.find((candidate) => candidate.url?.toLowerCase().endsWith('.zip')) ?? manifest.files?.[0];
+  const file =
+    manifest.files?.find((candidate) => candidate.url?.toLowerCase().endsWith('.zip')) ?? manifest.files?.[0];
   const relativeOrAbsolutePath = file?.url || manifest.path;
   const downloadUrl = relativeOrAbsolutePath
     ? new URL(relativeOrAbsolutePath, updateConfig.manifest_url).href
@@ -312,7 +315,11 @@ async function fetchLatestSkillRelease(updateConfig: PresetSkillsUpdateConfigura
   return resolveSkillRelease(manifestText, updateConfig);
 }
 
-function verifySkillArchive(buffer: Buffer, release: ResolvedSkillRelease, updateConfig: PresetSkillsUpdateConfiguration) {
+function verifySkillArchive(
+  buffer: Buffer,
+  release: ResolvedSkillRelease,
+  updateConfig: PresetSkillsUpdateConfiguration
+) {
   const maxBytes = updateConfig.max_download_bytes ?? DEFAULT_SKILL_MAX_DOWNLOAD_BYTES;
   if (buffer.byteLength > maxBytes) {
     throw new Error(`Skill archive is too large: ${buffer.byteLength} > ${maxBytes}`);
@@ -355,7 +362,9 @@ async function downloadSkillArchive(
 }
 
 function asStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : [];
 }
 
 function uniqueNames(names: string[]): string[] {
