@@ -212,11 +212,14 @@ async function ensurePresetAssistant(config: PresetConfiguration, mcpServer: IMc
     name: config.assistant.name,
     description: config.assistant.description,
     avatar: config.assistant.avatar,
+    enabled_skills: [],
     custom_skill_names: [config.skill.name],
     recommended_prompts: config.assistant.recommended_prompts,
     defaults: {
       model: { mode: 'fixed', value: config.defaultModel },
-      skills: { mode: 'fixed', value: [config.skill.name] },
+      // Custom skills are represented by custom_skill_names in the Assistant API;
+      // defaults.skills is reserved for the selectable/default skill id list.
+      skills: { mode: 'fixed', value: [] },
       mcps: { mode: 'fixed', value: [mcpServer.id] },
     },
   };
