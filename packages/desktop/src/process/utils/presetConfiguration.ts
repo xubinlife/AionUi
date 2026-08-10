@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ipcBridge } from '@/common';
-import { mcpService } from '@/common/adapter/ipcBridge';
+import { assistants, fs, mcpService, mode } from '@/common/adapter/ipcBridge';
 import type { IMcpServer } from '@/common/config/storage';
 import type { CreateAssistantRequest } from '@/common/types/agent/assistantTypes';
 import type { CreateProviderRequest } from '@/common/types/provider/providerApi';
@@ -154,13 +153,13 @@ function buildPresetMcpServer(config: PresetConfiguration): PresetMcpServer {
 }
 
 async function ensurePresetProvider(config: PresetConfiguration): Promise<void> {
-  const providers = await ipcBridge.mode.listProviders.invoke();
+  const providers = await mode.listProviders.invoke();
   const exists = (providers ?? []).some(
     (provider) => provider.id === config.provider.id || provider.name === config.provider.name
   );
   if (exists) return;
 
-  await ipcBridge.mode.createProvider.invoke({
+  await mode.createProvider.invoke({
     ...config.provider,
     api_key: PRESET_API_KEY_PLACEHOLDER,
   });
@@ -184,7 +183,7 @@ async function ensurePresetMcp(config: PresetConfiguration): Promise<IMcpServer>
 }
 
 async function ensurePresetSkill(config: PresetConfiguration): Promise<void> {
-  const existing = await ipcBridge.fs.listAvailableSkills.invoke();
+  const existing = await fs.listAvailableSkills.invoke();
   if ((existing ?? []).some((skill) => skill.name === config.skill.name)) return;
 
   const tempRoot = await mkdtemp(path.join(tmpdir(), 'aionui-preset-skill-'));
@@ -192,15 +191,15 @@ async function ensurePresetSkill(config: PresetConfiguration): Promise<void> {
     const skillDir = path.join(tempRoot, config.skill.name);
     await mkdir(skillDir, { recursive: true });
     await writeFile(path.join(skillDir, 'SKILL.md'), config.skill.content, 'utf8');
-    await ipcBridge.fs.importSkills.invoke({ skill_path: skillDir });
+    await fs.importSkills.invoke({ skill_path: skillDir });
   } finally {
     await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
 async function ensurePresetAssistant(config: PresetConfiguration, mcpServer: IMcpServer): Promise<void> {
-  const assistants = await ipcBridge.assistants.list.invoke();
-  const exists = (assistants ?? []).some(
+  const existing = await assistants.list.invoke();
+  const exists = (existing ?? []).some(
     (assistant) => assistant.id === config.assistant.id || assistant.name === config.assistant.name
   );
   if (exists) return;
@@ -219,7 +218,7 @@ async function ensurePresetAssistant(config: PresetConfiguration, mcpServer: IMc
     },
   };
 
-  await ipcBridge.assistants.create.invoke(request);
+  await assistants.create.invoke(request);
 }
 
 /**
