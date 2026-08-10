@@ -13,6 +13,7 @@ const {
   batchImportServersMock,
   createAssistantMock,
   createProviderMock,
+  deleteSkillMock,
   getAssistantMock,
   httpRequestMock,
   importSkillsMock,
@@ -31,6 +32,7 @@ const {
   batchImportServersMock: vi.fn(),
   createAssistantMock: vi.fn(),
   createProviderMock: vi.fn(),
+  deleteSkillMock: vi.fn(),
   getAssistantMock: vi.fn(),
   httpRequestMock: vi.fn(),
   importSkillsMock: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock('@/common/adapter/ipcBridge', () => ({
   fs: {
     listAvailableSkills: { invoke: listAvailableSkillsMock },
     importSkills: { invoke: importSkillsMock },
+    deleteSkill: { invoke: deleteSkillMock },
     writeAssistantRule: { invoke: writeAssistantRuleMock },
   },
   assistants: {
@@ -113,6 +116,15 @@ const mockResponse = (body: string | Buffer, headers: Record<string, string> = {
     arrayBuffer: async () => bufferArrayBuffer(buffer),
   } as unknown as Response;
 };
+
+const customSkill = (name: string) => ({
+  name,
+  description: name,
+  location: `/skills/${name}/SKILL.md`,
+  is_auto_inject: false,
+  is_custom: true,
+  source: 'custom' as const,
+});
 
 const validConfig = (): PresetConfiguration => ({
   version: 1,
@@ -190,6 +202,7 @@ beforeEach(() => {
   importSkillsMock.mockResolvedValue({
     skill_names: ['computing-platform-tasks', 'computing-platform-resources'],
   });
+  deleteSkillMock.mockResolvedValue(undefined);
   createAssistantMock.mockResolvedValue(undefined);
   setAssistantStateMock.mockResolvedValue(undefined);
   writeAssistantRuleMock.mockResolvedValue(true);
@@ -303,6 +316,7 @@ describe('ensurePresetConfiguration', () => {
       '/tmp/aionui-preset-skills-test/SKILL-0.0.1.zip',
       expect.any(Buffer)
     );
+    expect(deleteSkillMock).not.toHaveBeenCalled();
     expect(httpRequestMock).toHaveBeenCalledWith('PUT', '/api/settings/client', {
       'preset.computingPlatform.skills.version': '0.0.1',
       'preset.computingPlatform.skills.names': ['computing-platform-tasks', 'computing-platform-resources'],
@@ -327,7 +341,48 @@ describe('ensurePresetConfiguration', () => {
     });
   });
 
-  it('checks latest.yml but does not re-download a Skill package already at the latest version', async () => {
+  it('treats every Skill ZIP as a complete snapshot and deletes removed Skills', async () => {
+    httpRequestMock.mockImplementation(async (method: string, requestPath: string) => {
+      if (method === 'GET' && requestPath === '/api/settings/client') {
+        return {
+          'preset.computingPlatform.skills.version': '0.0.1',
+          'preset.computingPlatform.skills.names': [
+            'computing-platform-tasks',
+            'computing-platform-resources',
+            'computing-platform-obsolete',
+          ],
+        };
+      }
+      return undefined;
+    });
+    listAvailableSkillsMock.mockResolvedValue([
+      customSkill('computing-platform-tasks'),
+      customSkill('computing-platform-resources'),
+      customSkill('computing-platform-obsolete'),
+    ]);
+    netFetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes('latest.yml')) return mockResponse('version: 0.0.2\n');
+      return mockResponse(Buffer.from('mock-skill-zip-v2'));
+    });
+    importSkillsMock.mockResolvedValue({
+      skill_names: ['computing-platform-tasks', 'computing-platform-resources', 'computing-platform-artifacts'],
+    });
+
+    await expect(ensurePresetConfiguration(loadedPreset())).resolves.toBe(true);
+
+    expect(deleteSkillMock).toHaveBeenCalledTimes(1);
+    expect(deleteSkillMock).toHaveBeenCalledWith({ skill_name: 'computing-platform-obsolete' });
+    expect(httpRequestMock).toHaveBeenCalledWith('PUT', '/api/settings/client', {
+      'preset.computingPlatform.skills.version': '0.0.2',
+      'preset.computingPlatform.skills.names': [
+        'computing-platform-tasks',
+        'computing-platform-resources',
+        'computing-platform-artifacts',
+      ],
+    });
+  });
+
+  it('checks latest.yml but does not re-download a complete Skill snapshot already at the latest version', async () => {
     httpRequestMock.mockImplementation(async (method: string, requestPath: string) => {
       if (method === 'GET' && requestPath === '/api/settings/client') {
         return {
@@ -337,6 +392,7 @@ describe('ensurePresetConfiguration', () => {
       }
       return undefined;
     });
+    listAvailableSkillsMock.mockResolvedValue([customSkill('computing-platform-tasks')]);
 
     await ensurePresetConfiguration(loadedPreset());
 
@@ -344,6 +400,54 @@ describe('ensurePresetConfiguration', () => {
     expect(String(netFetchMock.mock.calls[0][0])).toContain('latest.yml');
     expect(importSkillsMock).not.toHaveBeenCalled();
     expect(writeFileMock).not.toHaveBeenCalled();
+    expect(deleteSkillMock).not.toHaveBeenCalled();
+  });
+
+  it('reinstalls the same remote version when the recorded local Skill snapshot is incomplete', async () => {
+    httpRequestMock.mockImplementation(async (method: string, requestPath: string) => {
+      if (method === 'GET' && requestPath === '/api/settings/client') {
+        return {
+          'preset.computingPlatform.skills.version': '0.0.1',
+          'preset.computingPlatform.skills.names': [
+            'computing-platform-tasks',
+            'computing-platform-resources',
+          ],
+        };
+      }
+      return undefined;
+    });
+    listAvailableSkillsMock.mockResolvedValue([customSkill('computing-platform-tasks')]);
+
+    await ensurePresetConfiguration(loadedPreset());
+
+    expect(netFetchMock).toHaveBeenCalledTimes(2);
+    expect(importSkillsMock).toHaveBeenCalledOnce();
+  });
+
+  it('continues Provider/MCP/Assistant setup without Skill bindings when the Skill mirror is unavailable', async () => {
+    const config = validConfig();
+    // Exercise the failure path even when a deployment would normally bind the
+    // downloaded Skills to the Assistant.
+    config.skills.enabled = true;
+    netFetchMock.mockRejectedValue(new Error('mirror unavailable'));
+
+    await expect(ensurePresetConfiguration(loadedPreset(config))).resolves.toBe(true);
+
+    expect(createProviderMock).toHaveBeenCalled();
+    expect(batchImportServersMock).toHaveBeenCalled();
+    expect(importSkillsMock).not.toHaveBeenCalled();
+    expect(createAssistantMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'computing-platform-assistant',
+        custom_skill_names: [],
+      })
+    );
+    expect(setAssistantStateMock).toHaveBeenCalledWith({ id: 'computing-platform-assistant', enabled: false });
+    expect(httpRequestMock).not.toHaveBeenCalledWith(
+      'PUT',
+      '/api/settings/client',
+      expect.objectContaining({ 'preset.computingPlatform.skills.version': expect.anything() })
+    );
   });
 
   it('does not overwrite existing user model or MCP credentials', async () => {
@@ -361,6 +465,7 @@ describe('ensurePresetConfiguration', () => {
         name: '计算平台助手',
       },
     ]);
+    listAvailableSkillsMock.mockResolvedValue([customSkill('computing-platform-tasks')]);
     httpRequestMock.mockImplementation(async (method: string, requestPath: string) => {
       if (method === 'GET' && requestPath === '/api/settings/client') {
         return {
