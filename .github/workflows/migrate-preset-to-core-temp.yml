@@ -1,0 +1,46 @@
+name: Migrate preset cleanup (temporary)
+
+on:
+  push:
+    branches:
+      - preset-configuration
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: preset-configuration
+          fetch-depth: 0
+      - name: Restore AionUi to upstream preset-free implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin dev
+          git checkout origin/dev -- \
+            packages/desktop/src/process/utils/runBackendMigrations.ts \
+            tests/unit/bootstrap/runBackendMigrations.test.ts
+          git rm -f \
+            packages/desktop/src/process/utils/presetConfiguration.ts \
+            public/preset/assistant-rules.md \
+            public/preset/computing-platform.json \
+            tests/unit/bootstrap/presetConfiguration.test.ts
+          git diff --check
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: move computing platform preset to AionCore'
+          git pull --rebase origin preset-configuration
+          git push origin HEAD:preset-configuration
