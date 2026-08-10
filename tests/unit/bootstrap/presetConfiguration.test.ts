@@ -36,24 +36,19 @@ const {
   writeFileMock: vi.fn(),
 }));
 
-vi.mock('@/common', () => ({
-  ipcBridge: {
-    mode: {
-      listProviders: { invoke: listProvidersMock },
-      createProvider: { invoke: createProviderMock },
-    },
-    fs: {
-      listAvailableSkills: { invoke: listAvailableSkillsMock },
-      importSkills: { invoke: importSkillsMock },
-    },
-    assistants: {
-      list: { invoke: listAssistantsMock },
-      create: { invoke: createAssistantMock },
-    },
-  },
-}));
-
 vi.mock('@/common/adapter/ipcBridge', () => ({
+  mode: {
+    listProviders: { invoke: listProvidersMock },
+    createProvider: { invoke: createProviderMock },
+  },
+  fs: {
+    listAvailableSkills: { invoke: listAvailableSkillsMock },
+    importSkills: { invoke: importSkillsMock },
+  },
+  assistants: {
+    list: { invoke: listAssistantsMock },
+    create: { invoke: createAssistantMock },
+  },
   mcpService: {
     listServers: { invoke: listServersMock },
     batchImportServers: { invoke: batchImportServersMock },
