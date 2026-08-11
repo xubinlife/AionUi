@@ -21,7 +21,7 @@ const os = require('os');
 const path = require('path');
 const { verifyBundledAioncoreResources } = require('./verify-bundled-aioncore-resources');
 
-const GITHUB_OWNER = 'iOfficeAI';
+const GITHUB_OWNER = 'xubinlife';
 const GITHUB_REPO = 'AionCore';
 
 const ACTIONS_ARTIFACT_TARGETS = {
