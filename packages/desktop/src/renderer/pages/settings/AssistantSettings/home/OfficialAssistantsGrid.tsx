@@ -8,7 +8,7 @@ import type { AssistantListItem } from '../types';
 import { type AssistantEnabledFilter, filterByEnabled } from '../assistantUtils';
 import AssistantAvatar from '../AssistantAvatar';
 import RuntimeBadge from './RuntimeBadge';
-import { Button, Dropdown, Menu, Switch } from '@arco-design/web-react';
+import { Button, Dropdown, Menu, Message, Switch } from '@arco-design/web-react';
 import { AllApplication, Down, MoreOne } from '@icon-park/react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +24,7 @@ type OfficialAssistantsGridProps = {
 };
 
 const FILTER_OPTIONS: AssistantEnabledFilter[] = ['all', 'enabled', 'disabled'];
+const COMPUTING_PLATFORM_ASSISTANT_ID = 'computing-platform-assistant';
 
 /**
  * Official (builtin) assistants as a card grid. Official templates cannot be
@@ -139,7 +140,13 @@ const OfficialAssistantsGrid: React.FC<OfficialAssistantsGridProps> = ({
                     size='small'
                     data-testid={`switch-enabled-${assistant.id}`}
                     checked={enabled}
-                    onChange={(checked) => onToggleEnabled(assistant, checked)}
+                    onChange={(checked) => {
+                      if (checked && assistant.id === COMPUTING_PLATFORM_ASSISTANT_ID) {
+                        Message.info('暂未开放');
+                        return;
+                      }
+                      onToggleEnabled(assistant, checked);
+                    }}
                   />
                 </span>
               </div>
