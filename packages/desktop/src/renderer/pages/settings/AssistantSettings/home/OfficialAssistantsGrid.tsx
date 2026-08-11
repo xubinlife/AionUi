@@ -25,6 +25,7 @@ type OfficialAssistantsGridProps = {
 
 const FILTER_OPTIONS: AssistantEnabledFilter[] = ['all', 'enabled', 'disabled'];
 const COMPUTING_PLATFORM_ASSISTANT_ID = 'computing-platform-assistant';
+const COMPUTING_PLATFORM_ASSISTANT_AVAILABLE = false;
 
 /**
  * Official (builtin) assistants as a card grid. Official templates cannot be
@@ -141,7 +142,11 @@ const OfficialAssistantsGrid: React.FC<OfficialAssistantsGridProps> = ({
                     data-testid={`switch-enabled-${assistant.id}`}
                     checked={enabled}
                     onChange={(checked) => {
-                      if (checked && assistant.id === COMPUTING_PLATFORM_ASSISTANT_ID) {
+                      if (
+                        checked &&
+                        assistant.id === COMPUTING_PLATFORM_ASSISTANT_ID &&
+                        !COMPUTING_PLATFORM_ASSISTANT_AVAILABLE
+                      ) {
                         Message.info('暂未开放');
                         return;
                       }
