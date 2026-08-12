@@ -5,6 +5,7 @@
  */
 
 import '@/common/platform/register-electron';
+import '@process/utils/systemCaTrust';
 // configureChromium sets app name (dev isolation) and Chromium flags — must run before other modules
 import '@process/utils/configureChromium';
 
