@@ -24,6 +24,8 @@
   "closeTabMessage": "Mevcut içerik kaydedilmedi. Kapatmadan önce kaydetmek ister misiniz?",
   "closeTabsTitle": "Sekmeleri Kapat",
   "closeTabsMessage": "{{count}} sekmede kaydedilmemiş değişiklik var. Kapatmadan önce kaydedilsin mi?",
+  "closeTabsMessage_one": "{{count}} sekmede kaydedilmemiş değişiklik var. Kapatmadan önce kaydedilsin mi?",
+  "closeTabsMessage_other": "{{count}} sekmede kaydedilmemiş değişiklik var. Kapatmadan önce kaydedilsin mi?",
   "saveAndClose": "Kaydet ve Kapat",
   "closeWithoutSave": "Kaydetme",
   "pptTitle": "PowerPoint Sunumu",
@@ -161,5 +163,8 @@
     "confirmMessage": "Bu sekmede kaydedilmemiş değişiklikler var. Yeniden yükleme onları diskteki içerikle değiştirir.",
     "discardAndRefresh": "Değişiklikleri sil ve yenile",
     "officeNotWired": "Office belgelerini yenileme henüz kullanılamıyor — değişiklikleri görmek için dosyayı kapatıp yeniden açın."
-  }
+  },
+  "zoomIn": "Yakınlaştır",
+  "zoomOut": "Uzaklaştır",
+  "zoomReset": "Görünümü sıfırla"
 }

@@ -82,7 +82,7 @@ class SaveRefusedError extends Error {
 }
 
 const PreviewPanel: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     isOpen,
     tabs,
@@ -743,8 +743,10 @@ const PreviewPanel: React.FC = () => {
             // Rendered at whatever precision it takes to actually look bigger than
             // the limit — at 2 decimals a file one byte over 1 MB also prints
             // "1 MB", making the sentence say "1 MB exceeds 1 MB".
-            size: formatSizeAboveLimit(sizeBytes ?? 0, thresholdBytes ?? 0, formatFileSize),
-            threshold: formatFileSize(thresholdBytes ?? 0),
+            size: formatSizeAboveLimit(sizeBytes ?? 0, thresholdBytes ?? 0, (value, decimals) =>
+              formatFileSize(value, decimals, i18n.language)
+            ),
+            threshold: formatFileSize(thresholdBytes ?? 0, 2, i18n.language),
           })}
         </div>
       </div>
@@ -815,7 +817,7 @@ const PreviewPanel: React.FC = () => {
                 />
               </div>
               {/* 拖动分割线 / Drag handle */}
-              {createDragHandle({ className: 'absolute right-0 top-0 bottom-0' })}
+              {createDragHandle({ className: 'absolute end-0 top-0 bottom-0' })}
             </div>
 
             {/* 右侧：预览 / Right: Preview */}
@@ -892,7 +894,7 @@ const PreviewPanel: React.FC = () => {
                 />
               </div>
               {/* 拖动分割线 / Drag handle */}
-              {createDragHandle({ className: 'absolute right-0 top-0 bottom-0' })}
+              {createDragHandle({ className: 'absolute end-0 top-0 bottom-0' })}
             </div>
 
             {/* 右侧：预览 / Right: Preview */}

@@ -46,6 +46,9 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     conversations,
     isConversationGenerating,
     hasCompletionUnread,
+    isManualUnread,
+    markManualUnread,
+    clearManualUnread,
     expandedWorkspaces,
     pinnedConversations,
     timelineSections,
@@ -65,7 +68,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
           <span className='text-14px text-t-tertiary sider-section-title group-hover/label:text-t-primary transition-colors font-[500] leading-none'>
             {label}
           </span>
-          <span className='ml-2px flex items-center justify-center opacity-0 group-hover/label:opacity-100 transition-opacity text-t-tertiary shrink-0'>
+          <span className='ms-2px flex items-center justify-center opacity-0 group-hover/label:opacity-100 transition-opacity text-t-tertiary shrink-0'>
             <Right
               theme='outline'
               size={12}
@@ -73,7 +76,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
             />
           </span>
           {trailing && (
-            <div className='ml-auto' onClick={(e) => e.stopPropagation()}>
+            <div className='ms-auto' onClick={(e) => e.stopPropagation()}>
               {trailing}
             </div>
           )}
@@ -115,6 +118,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     handleTogglePin,
     handleMenuVisibleChange,
     handleOpenMenu,
+    handleToggleManualUnread,
     handleCreateCronTask,
     handleRemoveProject,
     removeProjectTarget,
@@ -129,6 +133,9 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     setSelectedConversationIds,
     toggleSelectedConversation,
     markAsRead,
+    markManualUnread,
+    clearManualUnread,
+    isManualUnread,
   });
 
   const { sensors, handleDragEnd, isDragEnabled } = useDragAndDrop({
@@ -156,7 +163,8 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     (conversation: TChatConversation): ConversationRowProps => ({
       conversation,
       isGenerating: isConversationGenerating(conversation.id),
-      hasCompletionUnread: hasCompletionUnread(conversation.id),
+      hasUnread: hasCompletionUnread(conversation.id) || isManualUnread(conversation.id),
+      isManualUnread: isManualUnread(conversation.id),
       collapsed,
       tooltipEnabled,
       batchMode,
@@ -171,6 +179,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       onCreateCronTask: handleCreateCronTask,
       onDelete: handleDeleteClick,
       onTogglePin: handleTogglePin,
+      onToggleManualUnread: handleToggleManualUnread,
       getJobStatus,
       resolveConversationName,
     }),
@@ -180,6 +189,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       batchMode,
       isConversationGenerating,
       hasCompletionUnread,
+      isManualUnread,
       selectedConversationIds,
       id,
       dropdownVisibleId,
@@ -191,6 +201,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       handleCreateCronTask,
       handleDeleteClick,
       handleTogglePin,
+      handleToggleManualUnread,
       getJobStatus,
       resolveConversationName,
     ]

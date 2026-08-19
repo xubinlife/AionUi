@@ -24,6 +24,8 @@
   "closeTabMessage": "当前内容还未保存，是否保存后再关闭？",
   "closeTabsTitle": "关闭标签页",
   "closeTabsMessage": "有 {{count}} 个标签页未保存，是否保存后再关闭？",
+  "closeTabsMessage_one": "有 {{count}} 个标签页未保存，是否保存后再关闭？",
+  "closeTabsMessage_other": "有 {{count}} 个标签页未保存，是否保存后再关闭？",
   "saveAndClose": "保存并关闭",
   "closeWithoutSave": "不保存",
   "pptTitle": "PowerPoint 演示文稿",
@@ -161,5 +163,8 @@
     "confirmMessage": "该标签页有未保存的修改，重新加载会用磁盘上的内容覆盖它们。",
     "discardAndRefresh": "放弃修改并刷新",
     "officeNotWired": "Office 文档的刷新尚未接入——请关闭后重新打开文件以查看改动。"
-  }
+  },
+  "zoomIn": "放大",
+  "zoomOut": "缩小",
+  "zoomReset": "重置视图"
 }

@@ -28,7 +28,6 @@ import { useSlashCommands } from '@/renderer/hooks/chat/useSlashCommands';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
 import { useLatestRef } from '@/renderer/hooks/ui/useLatestRef';
 import {
-  shouldEnqueueConversationCommand,
   useConversationCommandQueue,
   type ConversationCommandQueueItem,
 } from '@/renderer/pages/conversation/platforms/useConversationCommandQueue';
@@ -46,8 +45,8 @@ import { type ChatFileRef, isChatFileRef, uploadFileRef } from '@/common/types/c
 import { localSelectionItems, mergeFileSelectionItems } from '@/renderer/utils/file/fileSelection';
 import { collectChatFileRefs, splitChatFileRefs } from '@/renderer/utils/file/messageFiles';
 import type { AgentModeOption } from '@/renderer/utils/model/agentTypes';
-import { Message, Tag } from '@arco-design/web-react';
-import { Brain, MagicHat, Shield } from '@icon-park/react';
+import { Button, Message, Tag } from '@arco-design/web-react';
+import { Brain, Lightning, MagicHat, Shield } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { classifyConversationBusyError } from '../conversationBusyError';
@@ -180,7 +179,7 @@ const AionrsSendBox: React.FC<{
     conversation_id,
     prepareRuntime: prepareRuntimeConfig,
     prepareSetRuntime: teamPermission?.warmupSession,
-    loadConfigOptions: teamPermission?.loadConfigOptions,
+    configOptionsPort: teamPermission?.configOptionsPort,
     enabled: Boolean(conversation_id),
   });
   const runtimeMode = runtimeConfig.mode;
@@ -324,7 +323,6 @@ const AionrsSendBox: React.FC<{
     items: queuedCommands,
     mode: queueMode,
     isInteractionLocked: isQueueInteractionLocked,
-    hasPendingCommands,
     enqueue,
     remove,
     prioritize,
@@ -376,24 +374,57 @@ const AionrsSendBox: React.FC<{
     void processInitialMessage();
   }, [conversation_id, current_model?.use_model, executeCommand]);
 
-  const onSendHandler = async (message: string) => {
+  // aionrs backends never support mid-turn delivery: while the agent is
+  // replying, sending is hard-blocked with a toast instead of implicitly
+  // enqueuing. The only way to queue a message while busy is the explicit
+  // "add to queue" entry (handleAddToQueue below).
+  const onSendHandler = async (message: string): Promise<void | false> => {
+    if (isBusy) {
+      Message.warning(
+        t('conversation.commandQueue.midturnBlocked', {
+          defaultValue:
+            'This agent is still working, so the message can’t be sent directly. Save it to Draft box and send it later.',
+        })
+      );
+      return false;
+    }
+
     const filesToSend = collectChatFileRefs(uploadFile, atPath);
     clearFiles();
     emitter.emit('aionrs.selected.file.clear');
-
-    if (
-      shouldEnqueueConversationCommand({
-        enabled: true,
-        isBusy,
-        hasPendingCommands,
-      })
-    ) {
-      enqueue({ input: message, files: filesToSend });
-      return;
-    }
-
     await executeCommand({ input: message, files: filesToSend });
   };
+
+  const [interrupting, setInterrupting] = useState(false);
+  const handleInterruptSend = async () => {
+    if (!teamRuntime?.onInterruptSend || !content.trim() || interrupting) return;
+    const files = collectChatFileRefs(uploadFile, atPath);
+    const input = content;
+    setContent('');
+    clearFiles();
+    emitter.emit('aionrs.selected.file.clear');
+    setInterrupting(true);
+    try {
+      await teamRuntime.onInterruptSend({ input, files });
+    } finally {
+      setInterrupting(false);
+    }
+  };
+
+  // Explicit "add to queue" entry — visibility is keyed only to the user's
+  // own input (non-empty draft), never to the agent's busy/replying state:
+  // tying it to that racy, async signal made the entry appear/disappear
+  // unpredictably. Clicking while idle is semantically fine — the queue's own
+  // mode governs (auto drains immediately, manual holds). Clears the draft
+  // the same way a send would.
+  const canQueueCurrentDraft = content.trim().length > 0;
+  const handleAddToQueue = useCallback(() => {
+    const filesToSend = collectChatFileRefs(uploadFile, atPath);
+    enqueue({ input: content, files: filesToSend });
+    setContent('');
+    clearFiles();
+    emitter.emit('aionrs.selected.file.clear');
+  }, [atPath, clearFiles, content, enqueue, setContent, uploadFile]);
 
   const handleEditQueuedCommand = useCallback(
     (item: ConversationCommandQueueItem) => {
@@ -450,13 +481,14 @@ const AionrsSendBox: React.FC<{
 
   const handleSheetModelSelect = useCallback(
     (value: string) => {
+      if (runtimeConfig.isConfigOptionBlocked?.('model')) return;
       // value format: `${providerId}::${modelName}`
       const [providerId, modelName] = value.split('::');
       const provider = modelSelection.providers.find((p) => p.id === providerId);
       if (!provider || !modelName) return;
       void modelSelection.handleSelectModel(provider, modelName);
     },
-    [modelSelection]
+    [modelSelection, runtimeConfig]
   );
 
   const sheetEntries = useMemo<MobileActionSheetEntry[]>(() => {
@@ -698,7 +730,6 @@ const AionrsSendBox: React.FC<{
         onStop={effectiveHandleStop}
         onRetryStart={teamRuntime?.onRetryStart ? () => void teamRuntime.onRetryStart?.() : undefined}
       />
-
       <SendBox
         data-testid='aionrs-sendbox'
         onMobilePlusClick={isMobile ? () => setIsMobileSheetOpen(true) : undefined}
@@ -713,6 +744,15 @@ const AionrsSendBox: React.FC<{
         active={teamRuntime?.isActive}
         onFocused={teamRuntime?.onFocus}
         disabled={!current_model?.use_model}
+        sendDisabled={isBusy}
+        sendDisabledTooltip={
+          isBusy
+            ? t('conversation.commandQueue.midturnBlockedSendHint', {
+                defaultValue:
+                  'The current agent is still working and cannot receive another message yet. Add it to Draft box instead.',
+              })
+            : undefined
+        }
         placeholder={
           current_model?.use_model
             ? t('acp.sendbox.placeholder', {
@@ -750,7 +790,7 @@ const AionrsSendBox: React.FC<{
               onModeChanged={propagateMode}
               beforeRuntimeSync={prepareRuntimeConfig}
               beforeRuntimeSet={teamPermission?.warmupSession}
-              loadConfigOptions={teamPermission?.loadConfigOptions}
+              configOptionsPort={teamPermission?.configOptionsPort}
             />
           </div>
         }
@@ -799,7 +839,29 @@ const AionrsSendBox: React.FC<{
         onSend={onSendHandler}
         slash_commands={slash_commands}
         onSlashBuiltinCommand={onSlashBuiltinCommand}
+        onAddToDraft={handleAddToQueue}
+        addToDraftDisabled={!canQueueCurrentDraft}
+        addToDraftTooltip={
+          isBusy
+            ? t('conversation.commandQueue.addToQueueBusyHint', {
+                defaultValue: 'Save to Draft box and send it later.',
+              })
+            : t('conversation.commandQueue.addToQueue', { defaultValue: 'Save to Draft box' })
+        }
         allowSendWhileLoading
+        sendButtonPrefix={
+          teamRuntime?.onInterruptSend && content.trim() ? (
+            <Button
+              size='mini'
+              type='secondary'
+              icon={<Lightning />}
+              loading={interrupting}
+              onClick={() => void handleInterruptSend()}
+            >
+              {t('team.interruptAndSend')}
+            </Button>
+          ) : undefined
+        }
       />
       {isMobile && (
         <>

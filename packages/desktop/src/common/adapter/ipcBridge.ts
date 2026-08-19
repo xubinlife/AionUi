@@ -73,12 +73,15 @@ import type {
   ITeamTaskItem,
   ICancelTeamChildTurnParams,
   ICancelTeamRunParams,
+  IInterruptTeamAgentParams,
   IPauseTeamSlotParams,
   ISendTeamAgentMessageParams,
   ISendTeamMessageParams,
   ITeamTeammateMessageEvent,
+  ITeamInterruptAgentResponse,
   TTeam,
   TeamAssistant,
+  TeamContextResetResponse,
 } from '../types/team/teamTypes';
 import type {
   AutoUpdateReadyResult,
@@ -260,6 +263,17 @@ export const conversation = {
     (p) => `/api/conversations/${p.conversation_id}/runtime/ensure`,
     () => undefined
   ),
+  /**
+   * Restart the conversation's agent runtime: tears down the cached CLI agent
+   * process (cancelling any active turn) and respawns it, resuming the session
+   * when possible. Chat history is preserved. Used after external CLI config
+   * changes (e.g. a ccswitch channel switch) that a running process cannot
+   * pick up on its own.
+   */
+  restartRuntime: httpPost<EnsureConversationRuntimeResponse, { conversation_id: string }>(
+    (p) => `/api/conversations/${p.conversation_id}/runtime/restart`,
+    () => undefined
+  ),
   activeLease: httpPost<void, { conversation_id: string }>(
     (p) => `/api/conversations/${p.conversation_id}/active-lease`,
     () => undefined
@@ -326,12 +340,29 @@ export const conversation = {
   userCreated: wsEmitter<{
     conversation_id: string;
     msg_id: string;
+    /** Present when the send request carried a client-generated id, letting
+     * callers correlate this row with the outgoing send without matching on
+     * text/time. Not the canonical id — `msg_id` (the server-assigned id) is
+     * what the message list keys on. */
+    client_msg_id?: string;
     content: string;
     position: 'right';
-    status: 'finish';
+    /** 'pending' for a message delivered mid-turn that the agent hasn't
+     * consumed yet (see `message.statusChanged`); 'finish' otherwise. */
+    status: 'finish' | 'pending';
     hidden: boolean;
     created_at: number;
   }>('message.userCreated'),
+  /** Fired when the agent actually consumes a mid-turn-delivered message
+   * (claude command_lifecycle Started; codex synthetic receipt). Flips the
+   * message row from 'pending' to 'finish'; correlate by `msg_id`, never by
+   * text/time. */
+  statusChanged: wsEmitter<{
+    user_id: string;
+    conversation_id: string;
+    msg_id: string;
+    status: 'finish' | 'pending' | 'error';
+  }>('message.statusChanged'),
   artifactStream: wsEmitter<IConversationArtifact>('conversation.artifact'),
   turnCompleted: wsMappedEmitter<IConversationTurnCompletedEvent>('turn.completed', (raw) => {
     const r = raw as Record<string, unknown>;
@@ -358,6 +389,9 @@ export const conversation = {
       is_processing: (rawRuntime.is_processing ?? rawRuntime.isProcessing ?? false) as boolean,
       pending_confirmations: (rawRuntime.pending_confirmations ?? rawRuntime.pendingConfirmations ?? 0) as number,
       turn_id: (rawRuntime.turn_id ?? rawRuntime.turnId ?? null) as string | null,
+      supports_midturn_delivery: (rawRuntime.supports_midturn_delivery ??
+        rawRuntime.supportsMidturnDelivery ??
+        false) as boolean,
     };
     const rawModel = (r.model ?? {}) as Record<string, unknown>;
     const model: IConversationTurnCompletedEvent['model'] = {
@@ -1841,6 +1875,10 @@ export interface IConversationTurnCompletedEvent {
     is_processing: boolean;
     pending_confirmations: number;
     turn_id: string | null;
+    /** Whether a message sent right now reaches the agent without waiting for
+     * the current turn to end. The ONLY capability bit the frontend may gate
+     * mid-turn UI on. */
+    supports_midturn_delivery: boolean;
   };
   workspace: string;
   model: {
@@ -2143,6 +2181,14 @@ export const team = {
   getConfigOptions: httpGet<GetConfigOptionsResponse, { team_id: string; conversation_id: string }>(
     (p) => `/api/teams/${p.team_id}/conversations/${encodeURIComponent(p.conversation_id)}/config-options`
   ),
+  setConfigOption: httpPut<
+    SetConfigOptionResponse,
+    { team_id: string; conversation_id: string; option_id: string; value: string }
+  >(
+    (p) =>
+      `/api/teams/${p.team_id}/conversations/${encodeURIComponent(p.conversation_id)}/config-options/${encodeURIComponent(p.option_id)}`,
+    (p): SetConfigOptionRequest => ({ value: p.value })
+  ),
   activeLease: httpPost<void, { team_id: string }>(
     (p) => `/api/teams/${p.team_id}/active-lease`,
     () => undefined
@@ -2150,6 +2196,10 @@ export const team = {
   renameAgent: httpPatch<void, { team_id: string; slot_id: string; new_name: string }>(
     (p) => `/api/teams/${p.team_id}/agents/${p.slot_id}/name`,
     (p) => ({ name: p.new_name })
+  ),
+  updateAgentModel: httpPatch<void, { team_id: string; slot_id: string; model_id: string }>(
+    (p) => `/api/teams/${p.team_id}/agents/${p.slot_id}/model`,
+    (p) => ({ model_id: p.model_id })
   ),
   renameTeam: httpPatch<void, { id: string; name: string }>(
     (p) => `/api/teams/${p.id}/name`,
@@ -2199,8 +2249,29 @@ export const team = {
       files: p.files,
     })
   ),
+  interruptAgent: httpPost<ITeamInterruptAgentResponse, IInterruptTeamAgentParams>(
+    (p) => `/api/teams/${p.team_id}/agents/${p.slot_id}/interrupt`,
+    (p) => ({
+      message: p.input,
+      files: p.files,
+      reason: p.reason,
+      queued_policy: p.queued_policy ?? 'retain',
+    })
+  ),
   attachAgent: httpPost<void, { team_id: string; slot_id: string }>(
     (p) => `/api/teams/${p.team_id}/agents/${p.slot_id}/attach`
+  ),
+  /**
+   * Force-restart a team member's agent runtime (kill the cached CLI process
+   * and rebuild it via the team attach chain, preserving the resume anchor).
+   * Synchronous: resolves once the member is Ready again. Returns HTTP 409
+   * with code TEAM_MEMBER_BUSY while the member is mid-reply.
+   */
+  restartAgentRuntime: httpPost<void, { team_id: string; slot_id: string }>(
+    (p) => `/api/teams/${p.team_id}/agents/${p.slot_id}/runtime/restart`
+  ),
+  resetAgentContext: httpPost<TeamContextResetResponse, { team_id: string; slot_id: string }>(
+    (p) => `/api/teams/${p.team_id}/agents/${p.slot_id}/context/reset`
   ),
   cancelRun: httpPost<void, ICancelTeamRunParams>(
     (p) => `/api/teams/${p.team_id}/runs/${p.team_run_id}/cancel`,

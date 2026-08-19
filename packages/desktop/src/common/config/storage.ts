@@ -117,7 +117,13 @@ export interface IEnvStorageRefer {
 export type ConversationSource = 'aionui' | 'telegram' | 'lark' | 'dingtalk' | 'weixin' | 'wecom' | (string & {});
 
 export type TChatConversationStatus = 'pending' | 'running' | 'finished';
-export type TConversationRuntimeStateKind = 'idle' | 'starting' | 'running' | 'cancelling' | 'waiting_confirmation';
+export type TConversationRuntimeStateKind =
+  | 'idle'
+  | 'starting'
+  | 'running'
+  | 'cancelling'
+  | 'restarting'
+  | 'waiting_confirmation';
 
 export type TConversationRuntimeSummary = {
   state: TConversationRuntimeStateKind;
@@ -127,6 +133,11 @@ export type TConversationRuntimeSummary = {
   is_processing: boolean;
   pending_confirmations: number;
   turn_id: string | null;
+  /** Whether a message sent right now reaches the agent without waiting for
+   * the current turn to end. The ONLY capability bit the frontend may gate
+   * mid-turn UI on. Optional/undefined is treated as false for older
+   * backends/responses that don't send it yet. */
+  supports_midturn_delivery?: boolean;
 };
 
 export type TConversationAssistantIdentity = {

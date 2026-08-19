@@ -24,6 +24,8 @@
   "closeTabMessage": "Der aktuelle Inhalt wurde nicht gespeichert. Vor dem Schließen speichern?",
   "closeTabsTitle": "Tabs schließen",
   "closeTabsMessage": "{{count}} Tabs haben ungespeicherte Änderungen. Vor dem Schließen speichern?",
+  "closeTabsMessage_one": "{{count}} Tab hat ungespeicherte Änderungen. Vor dem Schließen speichern?",
+  "closeTabsMessage_other": "{{count}} Tabs haben ungespeicherte Änderungen. Vor dem Schließen speichern?",
   "saveAndClose": "Speichern und schließen",
   "closeWithoutSave": "Nicht speichern",
   "pptTitle": "PowerPoint-Präsentation",
@@ -161,5 +163,8 @@
     "confirmMessage": "Dieser Tab hat ungespeicherte Änderungen. Neuladen ersetzt sie durch den Inhalt der Festplatte.",
     "discardAndRefresh": "Änderungen verwerfen und aktualisieren",
     "officeNotWired": "Das Neuladen von Office-Dokumenten ist noch nicht verfügbar — schließen Sie die Datei und öffnen Sie sie erneut."
-  }
+  },
+  "zoomIn": "Vergrößern",
+  "zoomOut": "Verkleinern",
+  "zoomReset": "Ansicht zurücksetzen"
 }

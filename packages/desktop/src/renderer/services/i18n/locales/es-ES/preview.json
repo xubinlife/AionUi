@@ -24,6 +24,8 @@
   "closeTabMessage": "El contenido actual no se ha guardado. ¿Deseas guardarlo antes de cerrar?",
   "closeTabsTitle": "Cerrar pestañas",
   "closeTabsMessage": "{{count}} pestañas tienen cambios sin guardar. ¿Guardar antes de cerrar?",
+  "closeTabsMessage_one": "{{count}} pestaña tiene cambios sin guardar. ¿Guardar antes de cerrar?",
+  "closeTabsMessage_other": "{{count}} pestañas tienen cambios sin guardar. ¿Guardar antes de cerrar?",
   "saveAndClose": "Guardar y cerrar",
   "closeWithoutSave": "No guardar",
   "pptTitle": "Presentación de PowerPoint",
@@ -161,5 +163,8 @@
     "confirmMessage": "Esta pestaña tiene cambios sin guardar. Recargar los reemplaza por el contenido del disco.",
     "discardAndRefresh": "Descartar cambios y actualizar",
     "officeNotWired": "Actualizar documentos de Office todavía no está disponible: cierra y vuelve a abrir el archivo para ver los cambios."
-  }
+  },
+  "zoomIn": "Acercar",
+  "zoomOut": "Alejar",
+  "zoomReset": "Restablecer vista"
 }

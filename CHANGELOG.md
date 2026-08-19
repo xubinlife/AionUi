@@ -1,5 +1,123 @@
 # Changelog
 
+## [2.1.58](https://github.com/iOfficeAI/AionUi/compare/v2.1.57...v2.1.58) (2026-08-18)
+
+### Desktop
+
+#### Features
+
+- **renderer:** add math formula rendering support for markdown viewer (#4079)
+- **theme:** activate structured token channel and add custom-theme guide (#4081)
+- **team:** runtime restart controls, model refresh button and team UX fixes (#3893)
+- **i18n:** right-to-left layout for Persian (fa-IR) (#4069)
+
+#### Bug Fixes
+
+- **chat:** align compose actions and draft queue draining (#4082)
+- **i18n:** align directory paths to the page direction, not hardcoded end (#4086)
+- **web-host:** stop leaking PREBUILDS_ONLY into aioncore agent subprocesses (#4078)
+- **i18n:** RTL polish pass — LTR paths/file names, shorthand paddings, mirrored chevrons (#4077)
+- **i18n:** locale-aware cron titles and byte sizes, Traditional Chinese mapping (#4075)
+- **i18n:** adopt i18next plural forms for count-bearing strings (#4074)
+- **i18n:** backfill every missing translation and wire webFsPicker into i18n (#4072)
+- **i18n:** quick-wins batch — Arco locales, tray French, hardcoded strings, stale title (#4071)
+- **i18n:** format numbers and dates against the app language, not the host locale (#4068)
+
+### Core ([v0.1.69](https://github.com/iOfficeAI/AionCore/releases/tag/v0.1.69))
+
+#### Features
+
+- **claude:** label tool steps by what they do (#870)
+- **team:** team mode reliability improvements, model switch persistence and runtime restart (#787)
+
+#### Bug Fixes
+
+- **claude:** three follow-ups to the tool-step labels (#872)
+
+---
+
+## [2.1.57](https://github.com/iOfficeAI/AionUi/compare/v2.1.56...v2.1.57) (2026-08-17)
+
+### Desktop
+
+#### Features
+
+- **chat:** mid-turn interjection — allow sending while a turn is in flight (#4012)
+- **explorer:** themed file-tree icons and SCM sidebar polish (#4057)
+
+#### Bug Fixes
+
+- **web-host:** pause client socket before splicing to avoid dropping upload bytes (#4066)
+- **explorer:** remove duplicate desktop toggle (#4065)
+- **web-host:** pick the real LAN IP for the WebUI access URL (#4060)
+
+### Core ([v0.1.68](https://github.com/iOfficeAI/AionCore/releases/tag/v0.1.68))
+
+#### Features
+
+- **codex:** auto-name sessions and label command steps (#868)
+- **conversation:** mid-turn interjection — deliver messages while a turn is in flight (#836)
+
+#### Bug Fixes
+
+- **acp:** give a first-run npx agent room to install before initialize times out (#854)
+- **acp:** stop collapsing agent failures into an opaque -32603 (#869)
+- **agents:** launch omp through its local CLI instead of the npx bridge (#855)
+- **antigravity:** read the HTTP status before parsing the hook decision (#867)
+- **auth:** stop CSRF rejecting agy's PreToolUse callback (#860)
+- **runtime:** find agent CLIs installed by bun and by vendor installers (#856)
+
+---
+
+## [2.1.56](https://github.com/iOfficeAI/AionUi/compare/v2.1.55...v2.1.56) (2026-08-14)
+
+### Desktop
+
+#### Features
+
+- **sidebar:** allow marking a conversation as unread (#4028)
+- **agent:** show a deferred mode switch as pending instead of switched (#4031)
+
+#### Refactoring
+
+- **theme:** remove deprecated community themes, keep official (#3922)
+
+### Core ([v0.1.67](https://github.com/iOfficeAI/AionCore/releases/tag/v0.1.67))
+
+#### Features
+
+- **session:** report a deferred mode switch as pending instead of observed (#846)
+
+#### Bug Fixes
+
+- restore direct CLI Team MCP capabilities (#853)
+
+---
+
+## [2.1.55](https://github.com/iOfficeAI/AionUi/compare/v2.1.54...v2.1.55) (2026-08-13)
+
+### Desktop
+
+#### Features
+
+- **conversation:** surface fork entry point in aionrs chats
+
+#### Bug Fixes
+
+- **update:** reject downgrade offers in update check (#4010)
+
+### Core ([v0.1.66](https://github.com/iOfficeAI/AionCore/releases/tag/v0.1.66))
+
+#### Features
+
+- **conversation:** support forking aionrs conversations
+
+#### Bug Fixes
+
+- **session:** retry claude session-title generation with timeout and observability (#843)
+
+---
+
 ## [2.1.54](https://github.com/iOfficeAI/AionUi/compare/v2.1.53...v2.1.54) (2026-08-12)
 
 ### Desktop

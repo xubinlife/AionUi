@@ -12,7 +12,7 @@ import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/ut
 import { cleanupSiderTooltips, getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { Checkbox, Dropdown, Menu, Spin, Tooltip } from '@arco-design/web-react';
-import { DeleteOne, EditOne, Export, MessageOne, MoreOne, Pushpin, Robot, Timer } from '@icon-park/react';
+import { DeleteOne, EditOne, Export, Inbox, MessageOne, MoreOne, Pushpin, Robot, Timer } from '@icon-park/react';
 import ForkBranchIcon from '@renderer/components/base/ForkBranchIcon';
 import classNames from 'classnames';
 import React from 'react';
@@ -25,7 +25,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const {
     conversation,
     isGenerating,
-    hasCompletionUnread,
+    hasUnread,
     collapsed,
     tooltipEnabled,
     batchMode,
@@ -48,6 +48,8 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     onDelete,
     onExport,
     onTogglePin,
+    onToggleManualUnread,
+    isManualUnread,
     getJobStatus,
   } = props;
   const { t } = useTranslation();
@@ -129,12 +131,12 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   };
 
   const renderCompletionUnreadDot = () => {
-    if (batchMode || !hasCompletionUnread || isGenerating) {
+    if (batchMode || !hasUnread || isGenerating) {
       return null;
     }
 
     return (
-      <span className='absolute right-8px top-1/2 -translate-y-1/2 flex items-center justify-center group-hover:hidden'>
+      <span className='absolute end-8px top-1/2 -translate-y-1/2 flex items-center justify-center group-hover:hidden'>
         <span className='h-8px w-8px rounded-full bg-#2C7FFF shadow-[0_0_0_2px_rgba(44,127,255,0.18)]' />
       </span>
     );
@@ -151,9 +153,9 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
         id={'c-' + conversation.id}
         className={classNames(
           'chat-history__item h-34px rd-8px flex items-center group cursor-pointer relative overflow-hidden shrink-0 conversation-item [&.conversation-item+&.conversation-item]:mt-2px min-w-0 transition-colors',
-          collapsed ? 'justify-center px-0' : 'justify-start gap-8px pr-16px',
+          collapsed ? 'justify-center px-0' : 'justify-start gap-8px pe-16px',
           // dimIcon means this row sits inside a project/cron parent — visually indent the row content while keeping the bg full-width
-          !collapsed && (dimIcon ? 'pl-34px' : 'pl-10px'),
+          !collapsed && (dimIcon ? 'ps-34px' : 'ps-10px'),
           {
             'hover:bg-fill-3': !batchMode && !selected,
             '!bg-fill-3': selected,
@@ -165,7 +167,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
       >
         {batchMode && (
           <span
-            className='mr-8px flex-center'
+            className='me-8px flex-center'
             onClick={(event) => {
               event.stopPropagation();
               onToggleChecked(conversation);
@@ -224,7 +226,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
         {!batchMode && (
           <div
             className={classNames(
-              'absolute right-8px top-1/2 -translate-y-1/2 items-center justify-end !collapsed-hidden',
+              'absolute end-8px top-1/2 -translate-y-1/2 items-center justify-end !collapsed-hidden',
               {
                 flex: isMobile || menuVisible,
                 'hidden group-hover:flex': !isMobile && !menuVisible,
@@ -240,6 +242,10 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
                   onClickMenuItem={(key) => {
                     if (key === 'pin') {
                       onTogglePin(conversation);
+                      return;
+                    }
+                    if (key === 'toggleManualUnread') {
+                      onToggleManualUnread(conversation);
                       return;
                     }
                     if (key === 'rename') {
@@ -263,6 +269,14 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
                     <div className='flex items-center gap-8px'>
                       <Pushpin theme='outline' size='14' />
                       <span>{isPinned ? t('conversation.history.unpin') : t('conversation.history.pin')}</span>
+                    </div>
+                  </Menu.Item>
+                  <Menu.Item key='toggleManualUnread'>
+                    <div className='flex items-center gap-8px'>
+                      <Inbox theme='outline' size='14' />
+                      <span>
+                        {isManualUnread ? t('conversation.history.markAsRead') : t('conversation.history.markAsUnread')}
+                      </span>
                     </div>
                   </Menu.Item>
                   <Menu.Item key='rename'>
