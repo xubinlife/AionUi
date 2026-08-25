@@ -19,9 +19,20 @@ export interface IConfigStorageRefer {
   /** Persisted app-wide UI zoom factor for Display settings */
   'ui.zoomFactor'?: number;
   /** Per-region configurable font sizes (px), set in Appearance settings */
+  'ui.fontSize.app'?: number;
   'ui.fontSize.chat'?: number;
   'ui.fontSize.markdown'?: number;
   'ui.fontSize.code'?: number;
+  /** Per-region configurable font families, set in Appearance settings */
+  'ui.fontFamily.app'?: string;
+  'ui.fontFamily.chat'?: string;
+  'ui.fontFamily.markdown'?: string;
+  'ui.fontFamily.code'?: string;
+  /** Per-region configurable font weights (standard tiers), set in Appearance settings */
+  'ui.fontWeight.app'?: string;
+  'ui.fontWeight.chat'?: string;
+  'ui.fontWeight.markdown'?: string;
+  'ui.fontWeight.code'?: string;
   /** Last-known main window size and position, restored on next launch */
   'window.bounds'?: { x?: number; y?: number; width: number; height: number };
   /** 桌面模式下是否自动启用 WebUI / Auto-enable WebUI in desktop mode */

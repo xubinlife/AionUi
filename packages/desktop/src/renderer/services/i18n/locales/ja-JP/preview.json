@@ -3,6 +3,8 @@
   "downloadFile": "ファイルをダウンロード",
   "closePreview": "プレビューを閉じる",
   "collapsePanel": "パネルを閉じる",
+  "maximizePanel": "最大化",
+  "restorePanel": "元に戻す",
   "source": "ソース",
   "code": "Code",
   "preview": "プレビュー",
@@ -37,10 +39,16 @@
   "openInSystemApp": "システム既定のアプリで開く",
   "openInSystemSuccess": "システム既定のアプリで開きました",
   "openInSystemFailed": "ファイルを開けませんでした",
+  "close": "閉じる",
   "closeLeft": "左側を閉じる",
   "closeRight": "右側を閉じる",
   "closeOthers": "他を閉じる",
   "closeAll": "すべて閉じる",
+  "closeUnmodified": "未変更を閉じる",
+  "copyPath": "パスをコピー",
+  "copyRelativePath": "相対パスをコピー",
+  "openLocation": "ファイルの場所を開く",
+  "openLocationFailed": "フォルダーを開けませんでした",
   "readOnlyLabel": "閲覧専用",
   "pathLabel": "パス",
   "missingFile": {
@@ -50,6 +58,7 @@
   "noTabs": "タブはありません",
   "openInPanelTooltip": "プレビューパネルで表示",
   "mermaidTitle": "Mermaid 図",
+  "wavedromTitle": "WaveDrom 波形図",
   "oversized": {
     "title": "ファイルが大きすぎてプレビューできません",
     "detail": "ファイルサイズ {{size}} が上限 {{threshold}} を超えています。システムのエディタで開いてください。",
@@ -166,5 +175,6 @@
   },
   "zoomIn": "拡大",
   "zoomOut": "縮小",
-  "zoomReset": "表示をリセット"
+  "zoomReset": "表示をリセット",
+  "diagramZoomHint": "スクロールでズーム • ドラッグで移動 • ESC で閉じる"
 }

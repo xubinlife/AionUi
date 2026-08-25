@@ -35,6 +35,18 @@ vi.mock('@renderer/pages/conversation/platforms/aionrs/AionrsSendBox', () => ({
   default: () => null,
 }));
 
+// This test is about ConversationContext wiring only; the plan bar pulls in the
+// message list + runtime view, neither of which this file's narrow mocks provide.
+vi.mock('@renderer/pages/conversation/PlanBar/ConversationPlanBar', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
+vi.mock('@renderer/pages/conversation/PlanBar/usePlanRecovery', () => ({
+  __esModule: true,
+  usePlanRecovery: () => {},
+}));
+
 vi.mock('@renderer/pages/conversation/Messages/hooks', () => {
   const PassThrough: React.FC<{ children?: React.ReactNode }> = ({ children }) => <>{children}</>;
   return {
@@ -55,17 +67,6 @@ vi.mock('@renderer/pages/conversation/Messages/artifacts', () => ({
   __esModule: true,
   ConversationArtifactProvider: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
 }));
-
-vi.mock('@renderer/components/media/LocalImageView', () => {
-  const PassThrough: React.FC<{ children?: React.ReactNode }> = ({ children }) => <>{children}</>;
-  return {
-    __esModule: true,
-    default: {
-      Provider: PassThrough,
-      useUpdateLocalImage: () => () => {},
-    },
-  };
-});
 
 import AionrsChat from '@renderer/pages/conversation/platforms/aionrs/AionrsChat';
 import type { AionrsModelSelection } from '@renderer/pages/conversation/platforms/aionrs/useAionrsModelSelection';

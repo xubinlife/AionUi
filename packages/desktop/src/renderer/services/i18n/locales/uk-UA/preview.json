@@ -3,6 +3,8 @@
   "downloadFile": "Завантажити файл",
   "closePreview": "Закрити перегляд",
   "collapsePanel": "Згорнути панель",
+  "maximizePanel": "Розгорнути",
+  "restorePanel": "Відновити",
   "source": "Вихідний код",
   "code": "Код",
   "preview": "Перегляд",
@@ -39,10 +41,16 @@
   "openInSystemApp": "Відкрити в системній програмі",
   "openInSystemSuccess": "Відкрито в системній програмі за замовчуванням",
   "openInSystemFailed": "Не вдалося відкрити в системній програмі",
+  "close": "Закрити",
   "closeLeft": "Закрити зліва",
   "closeRight": "Закрити справа",
   "closeOthers": "Закрити інші",
   "closeAll": "Закрити всі",
+  "closeUnmodified": "Закрити незмінені",
+  "copyPath": "Копіювати шлях",
+  "copyRelativePath": "Копіювати відносний шлях",
+  "openLocation": "Показати в папці",
+  "openLocationFailed": "Не вдалося відкрити папку з файлом",
   "readOnlyLabel": "Перегляд лише для читання",
   "pathLabel": "Шлях",
   "missingFile": {
@@ -52,6 +60,7 @@
   "noTabs": "Немає відкритих вкладок",
   "openInPanelTooltip": "Переглянути в панелі попереднього перегляду",
   "mermaidTitle": "Діаграма Mermaid",
+  "wavedromTitle": "Діаграма WaveDrom",
   "oversized": {
     "title": "Файл завеликий для попереднього перегляду",
     "detail": "Розмір файлу {{size}} перевищує ліміт {{threshold}}. Відкрийте його в системному редакторі.",
@@ -168,5 +177,6 @@
   },
   "zoomIn": "Збільшити",
   "zoomOut": "Зменшити",
-  "zoomReset": "Скинути вигляд"
+  "zoomReset": "Скинути вигляд",
+  "diagramZoomHint": "Колесо — масштаб • Перетягування — панорама • ESC — закрити"
 }
